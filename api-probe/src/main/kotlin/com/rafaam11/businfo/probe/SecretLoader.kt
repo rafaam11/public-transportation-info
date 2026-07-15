@@ -20,8 +20,10 @@ object SecretLoader {
         val properties = Properties().apply {
             Files.newInputStream(file).use { load(it) }
         }
-        return requireNotNull(properties.getProperty("DAEGU_BUS_SERVICE_KEY")) {
+        val serviceKey = requireNotNull(properties.getProperty("DAEGU_BUS_SERVICE_KEY")) {
             "DAEGU_BUS_SERVICE_KEY is missing"
         }.trim()
+        require(serviceKey.isNotEmpty()) { "DAEGU_BUS_SERVICE_KEY is blank" }
+        return serviceKey
     }
 }

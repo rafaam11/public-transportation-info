@@ -9,9 +9,15 @@ data class ProbeResponse(val statusCode: Int, val body: String, val requestSumma
 
 class DaeguApiProbe(
     private val baseUrl: HttpUrl = "https://apis.data.go.kr/6270000/dbmsapi02/".toHttpUrl(),
-    private val serviceKey: String,
+    serviceKey: String,
     private val client: OkHttpClient = OkHttpClient(),
 ) {
+    private val serviceKey = serviceKey.trim()
+
+    init {
+        require(this.serviceKey.isNotEmpty()) { "DAEGU_BUS_SERVICE_KEY is blank" }
+    }
+
     fun execute(command: ProbeCommand): ProbeResponse {
         val url = baseUrl.newBuilder()
             .addPathSegment(command.endpoint)
@@ -25,12 +31,19 @@ class DaeguApiProbe(
             return ProbeResponse(
                 statusCode = response.code,
                 body = requireNotNull(response.body).string(),
-                requestSummary = url.newBuilder()
-                    .removeAllQueryParameters("serviceKey")
-                    .addQueryParameter("serviceKey", "[redacted]")
-                    .build()
-                    .toString(),
+                requestSummary = sanitizedRequestSummary(command),
             )
         }
     }
+
+    private fun sanitizedRequestSummary(command: ProbeCommand): String = baseUrl.newBuilder()
+        .addPathSegment(command.endpoint)
+        .addQueryParameter("serviceKey", "[redacted]")
+        .apply {
+            command.parameters.forEach { (name, value) ->
+                addQueryParameter(name, if (SensitiveNamePolicy.isSensitive(name)) "[redacted]" else value)
+            }
+        }
+        .build()
+        .toString()
 }

@@ -19,4 +19,35 @@ class ProbeCommandTest {
             ProbeCommand.parse(arrayOf("anythingElse"))
         }
     }
+
+    @Test
+    fun rejectsUnknownEndpointThroughDirectConstruction() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ProbeCommand("../anythingElse", emptyMap())
+        }
+    }
+
+    @Test
+    fun rejectsBlankParameterValueThroughDirectConstruction() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ProbeCommand("getPos02", mapOf("routeId" to "   "))
+        }
+    }
+
+    @Test
+    fun rejectsServiceKeyAliasCaseInsensitively() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ProbeCommand.parse(arrayOf("getPos02", "--param", "Service-Key=not-allowed"))
+        }
+    }
+
+    @Test
+    fun snapshotsValidatedParametersAgainstCallerMutation() {
+        val parameters = mutableMapOf("routeId" to "123")
+        val command = ProbeCommand("getPos02", parameters)
+
+        parameters["token"] = ""
+
+        assertEquals(mapOf("routeId" to "123"), command.parameters)
+    }
 }
