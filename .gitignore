@@ -1,5 +1,6 @@
 # Local brainstorming companion artifacts
 .superpowers/
+.worktrees/
 
 # Android and Gradle local/build artifacts
 .gradle/
