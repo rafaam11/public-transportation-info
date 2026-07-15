@@ -10,3 +10,6 @@ build/
 local.properties
 *.jks
 *.keystore
+
+# Local API contract evidence and secrets
+.local/
