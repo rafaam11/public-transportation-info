@@ -1,0 +1,11 @@
+# Local brainstorming companion artifacts
+.superpowers/
+
+# Android and Gradle local/build artifacts
+.gradle/
+.idea/
+build/
+**/build/
+local.properties
+*.jks
+*.keystore
