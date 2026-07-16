@@ -59,4 +59,29 @@ class DaeguApiProbeTest {
             assertFalse(Files.readString(report).contains("runtime-secret"))
         }
     }
+
+    @Test
+    fun exposedParametersCannotBeMutatedBeforeRequest() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("{\"items\":[]}"))
+            server.start()
+            val command = ProbeCommand(
+                "getPos02",
+                linkedMapOf("routeId" to "123", "stopId" to "456"),
+            )
+            @Suppress("UNCHECKED_CAST")
+            val exposed = command.parameters as MutableMap<String, String>
+
+            assertThrows(UnsupportedOperationException::class.java) { exposed["routeId"] = "   " }
+            assertThrows(UnsupportedOperationException::class.java) { exposed["Service-Key"] = "injected-secret" }
+            assertThrows(UnsupportedOperationException::class.java) { exposed["unexpected"] = "unexpected-value" }
+
+            DaeguApiProbe(server.url("/"), "local-key").execute(command)
+            val requestUrl = server.takeRequest().requestUrl!!
+            assertTrue(requestUrl.queryParameter("routeId") == "123")
+            assertTrue(requestUrl.queryParameter("stopId") == "456")
+            assertTrue(requestUrl.queryParameter("Service-Key") == null)
+            assertTrue(requestUrl.queryParameter("unexpected") == null)
+        }
+    }
 }

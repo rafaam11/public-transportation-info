@@ -1,8 +1,10 @@
 package com.rafaam11.businfo.probe
 
+import java.util.Collections
+
 class ProbeCommand(endpoint: String, parameters: Map<String, String>) {
     val endpoint: String = endpoint
-    val parameters: Map<String, String> = parameters.toMap()
+    val parameters: Map<String, String> = Collections.unmodifiableMap(LinkedHashMap(parameters))
 
     init {
         require(this.endpoint in allowed) { "Endpoint is not allowlisted" }
