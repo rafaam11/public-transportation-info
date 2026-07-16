@@ -5,12 +5,16 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import okhttp3.Call
+import okhttp3.EventListener
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -121,6 +125,48 @@ class OkHttpDaeguBusRemoteDataSourceTest {
 
         assertTrue("cancellation took $cancelElapsedMillis ms", cancelElapsedMillis < 2_000)
         assertTrue("second request stayed queued behind cancelled call", secondRequest != null)
+        assertEquals(RemoteResult.Success(Unit), second.await())
+    }
+
+    @Test fun cancellingDuringResponseBodyCancelsCallAndFreesDispatcherForNextRequest() = runBlocking {
+        val dispatcher = okhttp3.Dispatcher().apply {
+            maxRequests = 1
+            maxRequestsPerHost = 1
+        }
+        val callCancelled = AtomicBoolean(false)
+        val bodyCancellableSource = OkHttpDaeguBusRemoteDataSource(
+            client = OkHttpClient.Builder()
+                .dispatcher(dispatcher)
+                .eventListener(object : EventListener() {
+                    override fun canceled(call: Call) {
+                        callCancelled.set(true)
+                    }
+                })
+                .callTimeout(10, TimeUnit.SECONDS)
+                .build(),
+            baseUrl = server.url("/"),
+            clock = Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC),
+        )
+        val slowBody = successEnvelope("{\"padding\":\"${"x".repeat(32 * 1024)}\"}")
+        server.enqueue(
+            MockResponse()
+                .setBody(slowBody)
+                .throttleBody(1_024, 250, TimeUnit.MILLISECONDS),
+        )
+        server.enqueue(MockResponse().setBody(BASIC_SUCCESS))
+
+        val first = launch(Dispatchers.Default) { bodyCancellableSource.validateKey("cancelled") }
+        server.takeRequest(2, TimeUnit.SECONDS) ?: error("body-delayed request was not received")
+        delay(300)
+        val cancelStartedAt = System.nanoTime()
+        first.cancelAndJoin()
+        val cancelElapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - cancelStartedAt)
+        val second = async(Dispatchers.Default) { bodyCancellableSource.validateKey("next") }
+        val secondRequest = server.takeRequest(2, TimeUnit.SECONDS)
+
+        assertTrue("body cancellation took $cancelElapsedMillis ms", cancelElapsedMillis < 2_000)
+        assertTrue("OkHttp call was not cancelled during body consumption", callCancelled.get())
+        assertTrue("second request stayed queued behind body consumption", secondRequest != null)
         assertEquals(RemoteResult.Success(Unit), second.await())
     }
 

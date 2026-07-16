@@ -113,3 +113,75 @@ Static/privacy checks:
 
 - No emulator/device was attached, so the Compose instrumentation suite was not executed at runtime. Compilation and instrumentation APK assembly succeeded.
 - `createComposeRule` emits an upstream deprecation warning recommending the v2 API, but the brief explicitly requested `createComposeRule`; this does not fail compilation.
+
+## R2 Final Review Fixes
+
+### Status
+
+Both remaining R2 Important findings were fixed on top of commit `e16a51c79d1faa72543401a716552794d4d1d435`.
+
+### RED evidence
+
+Before production or dependency changes, added:
+
+- a real MockWebServer regression with immediate response headers and a 32 KiB body throttled at 1 KiB per 250 ms;
+- an OkHttp `EventListener` assertion proving the underlying call is cancelled during body consumption;
+- prompt cancellation and follow-up-request assertions using a one-slot OkHttp dispatcher and the existing 10-second call timeout;
+- a static contract requiring the BOM-managed `ui-test-manifest` catalog alias and `debugImplementation` dependency.
+
+Command:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests "com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSourceTest.cancellingDuringResponseBodyCancelsCallAndFreesDispatcherForNextRequest" --tests "com.rafaam11.businfo.FoundationContractTest.composeInstrumentationHasBomManagedTestActivityHost" --no-daemon --max-workers=1
+```
+
+Result: 2/2 tests failed by assertion against the prior implementation. Body-phase cancellation did not promptly cancel the call, and the test-host dependency contract was absent.
+
+### GREEN implementation
+
+- The cancellable suspended operation now owns `Response.use`, response-body reading, JSON parsing, envelope validation, and remote-result mapping inside the OkHttp callback worker.
+- `invokeOnCancellation { call.cancel() }` remains registered while body consumption is in progress.
+- The callback closes every received response through one `Response.use` path, does not resume inactive continuations, maps body I/O/JSON failures as before, and has one terminal resume path per callback.
+- The caller now receives only a fully parsed `RemoteResult<JsonElement>`; body reading and Gson work no longer run on the ViewModel Main context.
+- Added BOM-managed `androidx.compose.ui:ui-test-manifest` as `debugImplementation` through the version catalog.
+
+The first GREEN compile exposed a missing `kotlin.coroutines.resume` import. After adding the import, the focused suite passed; a callback parameter-name warning was then removed before fresh verification.
+
+### Fresh verification
+
+All commands used the JDK/SDK/low-memory environment documented above.
+
+- Transport focused: `:app:testDebugUnitTest --tests "com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSourceTest"` — 12/12 passed.
+- Complete app unit suite: `:app:testDebugUnitTest` — 57/57 passed.
+- API-probe: `:api-probe:test --rerun-tasks` — 19/19 passed.
+- `:app:assembleDebug` — successful.
+- `:app:assembleDebugAndroidTest` — successful.
+- The merged and packaged debug manifests contain `androidx.activity.ComponentActivity` contributed by the Compose test manifest.
+- `adb devices` returned no attached emulator/device: 4 instrumentation test methods compiled and have a runnable host, but 0 were executed. No runtime-pass claim is made.
+- `git diff --check` — clean apart from Windows LF-to-CRLF notices.
+- Production-domain identifier scan — no matches.
+- Added-diff credential-literal scan — no matches.
+
+### R2 APK
+
+- Path: `app/build/outputs/apk/debug/app-debug.apk`
+- Size: 12,347,031 bytes
+- SHA-256: `C45BDF997D66FADE0B0A8204F5479DB74A1DFD8BE37DBD12268608C6F661CAAB`
+
+### R2 files
+
+- `app/src/main/kotlin/com/rafaam11/businfo/data/remote/OkHttpDaeguBusRemoteDataSource.kt`
+- `app/src/test/kotlin/com/rafaam11/businfo/data/remote/OkHttpDaeguBusRemoteDataSourceTest.kt`
+- `gradle/libs.versions.toml`
+- `app/build.gradle.kts`
+- `app/src/test/kotlin/com/rafaam11/businfo/FoundationContractTest.kt`
+- `.superpowers/sdd/final-fix-report.md`
+
+### R2 self-review and concerns
+
+- Header-delay cancellation coverage remains intact; the new regression covers the distinct post-header body phase.
+- Cancellation is observed by OkHttp's real `EventListener`, returns in under 2 seconds, and lets the follow-up request reach the server within 2 seconds instead of waiting for the 10-second timeout.
+- Parsing preserves prior HTTP, envelope, malformed-array, and privacy behavior while moving work off Main.
+- No framework was added; the host artifact is the official Compose BOM-managed test manifest.
+- No device was available, so instrumentation runtime behavior remains unexecuted. The test sources, host activity manifest, and instrumentation APK were verified.
+- `createComposeRule` still emits its non-failing upstream deprecation warning, as noted above.

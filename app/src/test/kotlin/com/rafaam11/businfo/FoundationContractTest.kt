@@ -29,4 +29,16 @@ class FoundationContractTest {
         val credentialExclusion = Regex.escape("domain=\"sharedpref\" path=\"credentials.xml\"").toRegex()
         assertEquals(2, credentialExclusion.findAll(extractionRules).count())
     }
+
+    @Test
+    fun composeInstrumentationHasBomManagedTestActivityHost() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val catalog = File(repoRoot, "gradle/libs.versions.toml").readText()
+        val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
+
+        assertTrue(catalog.contains("compose-ui-test-manifest = { module = \"androidx.compose.ui:ui-test-manifest\" }"))
+        assertTrue(appBuild.contains("debugImplementation(libs.compose.ui.test.manifest)"))
+    }
 }
