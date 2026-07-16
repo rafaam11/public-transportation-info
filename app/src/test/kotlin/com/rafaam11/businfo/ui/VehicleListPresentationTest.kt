@@ -49,25 +49,47 @@ class VehicleListPresentationTest {
     }
 
     @Test
-    fun vehicleTextContainsDirectionAndSequenceWithoutIdentifiers() {
+    fun vehicleTextContainsDirectionSequenceStopAndArrivalState() {
         val vehicle = VehicleSnapshot(
             routeId = "secret-route-id",
             routeNo = "814",
             moveDirection = "범물 방향",
-            stopId = "secret-stop-id",
+            stopId = "DGB123456",
             stopSequence = 17,
             latitude = 35.8714,
             longitude = 128.6014,
-            arrivalState = null,
-            busTypeCode2 = null,
-            busTypeCode3 = null,
+            arrivalState = "2분 후 도착",
+            busTypeCode2 = "hidden-type-2",
+            busTypeCode3 = "hidden-type-3",
         )
 
         val text = vehicle.primaryText()
 
         assertTrue(text.contains("범물 방향"))
         assertTrue(text.contains("17"))
+        assertTrue(text.contains("정류장 ID DGB123456"))
+        assertTrue(text.contains("도착 정보 2분 후 도착"))
+    }
+
+    @Test
+    fun vehicleTextDoesNotExposeInternalIdentifiers() {
+        val vehicle = VehicleSnapshot(
+            routeId = "secret-route-id",
+            routeNo = "814",
+            moveDirection = "범물 방향",
+            stopId = "DGB123456",
+            stopSequence = 17,
+            latitude = 35.8714,
+            longitude = 128.6014,
+            arrivalState = "2분 후 도착",
+            busTypeCode2 = "hidden-type-2",
+            busTypeCode3 = "hidden-type-3",
+        )
+
+        val text = vehicle.primaryText()
+
         assertFalse(text.contains("secret-route-id"))
-        assertFalse(text.contains("secret-stop-id"))
+        assertFalse(text.contains("hidden-type-2"))
+        assertFalse(text.contains("hidden-type-3"))
     }
 }

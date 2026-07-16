@@ -68,8 +68,11 @@ fun BusDataError.userMessage(): String = when (this) {
     BusDataError.RateLimited -> "요청 한도를 초과했습니다. 잠시 기다린 뒤 새로고침해 주세요."
 }
 
-fun VehicleSnapshot.primaryText(): String =
-    "$moveDirection · ${stopSequence?.let { "정류장 $it" } ?: "정류장 순서 미확인"}"
+fun VehicleSnapshot.primaryText(): String = buildString {
+    append("$moveDirection · ${stopSequence?.let { "정류장 $it" } ?: "정류장 순서 미확인"}")
+    append("\n정류장 ID ${stopId ?: "미확인"}")
+    append("\n도착 정보 ${arrivalState ?: "없음"}")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
