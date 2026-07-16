@@ -24,7 +24,11 @@ class OkHttpDaeguBusRemoteDataSource(
 
     override suspend fun validateKey(serviceKey: String): RemoteResult<Unit> =
         when (val result = request("getBasic02", serviceKey, emptyMap())) {
-            is RemoteResult.Success -> RemoteResult.Success(Unit)
+            is RemoteResult.Success -> if (result.value.isJsonObject) {
+                RemoteResult.Success(Unit)
+            } else {
+                RemoteResult.Failure(BusDataError.MalformedResponse)
+            }
             is RemoteResult.Failure -> result
         }
 

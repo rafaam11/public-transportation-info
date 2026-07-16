@@ -36,7 +36,10 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         server.enqueue(MockResponse().setBody(BASIC_SUCCESS))
 
         assertEquals(RemoteResult.Success(Unit), source.validateKey("secret"))
-        assertEquals("/getBasic02", server.takeRequest().requestUrl?.encodedPath)
+        val requestUrl = server.takeRequest().requestUrl!!
+        assertEquals("/getBasic02", requestUrl.encodedPath)
+        assertEquals(setOf("serviceKey"), requestUrl.queryParameterNames)
+        assertTrue(requestUrl.queryParameterNames.contains("serviceKey"))
     }
 
     @Test fun vehicleResponseMapsVerifiedCoordinatesAndQuery() = runTest {
@@ -56,7 +59,10 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals("45", vehicle.arrivalState)
         assertEquals("1", vehicle.busTypeCode2)
         assertEquals("2", vehicle.busTypeCode3)
-        assertEquals("3000814001", server.takeRequest().requestUrl?.queryParameter("routeId"))
+        val requestUrl = server.takeRequest().requestUrl!!
+        assertEquals(setOf("serviceKey", "routeId"), requestUrl.queryParameterNames)
+        assertTrue(requestUrl.queryParameterNames.contains("serviceKey"))
+        assertEquals("3000814001", requestUrl.queryParameter("routeId"))
     }
 
     @Test fun emptyVehicleItemsReturnsEmptyList() = runTest {
@@ -86,6 +92,14 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals(RemoteResult.Failure(BusDataError.MalformedResponse), source.validateKey("secret"))
     }
 
+    @Test fun basicItemsMustBeAnObject() = runTest {
+        listOf("\"not-an-object\"", "42", "[]").forEach { items ->
+            server.enqueue(MockResponse().setBody(successEnvelope(items)))
+
+            assertEquals(RemoteResult.Failure(BusDataError.MalformedResponse), source.validateKey("secret"))
+        }
+    }
+
     private companion object {
         const val BASIC_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
@@ -108,6 +122,11 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         const val NULL_ITEMS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":0,"items":null}}
+        """
+
+        fun successEnvelope(items: String) = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":0,"items":$items}}
         """
     }
 }
