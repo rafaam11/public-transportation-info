@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
+import com.google.gson.JsonParser
 import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.VehicleSnapshot
 import java.io.IOException
@@ -60,7 +61,11 @@ class OkHttpDaeguBusRemoteDataSource(
                 }
                 val responseBody = response.body
                     ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val envelope = gson.fromJson(responseBody.charStream(), Envelope::class.java)
+                val root = JsonParser.parseReader(responseBody.charStream())
+                if (!hasVerifiedEnvelopeTypes(root)) {
+                    return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
+                }
+                val envelope = gson.fromJson(root, Envelope::class.java)
                     ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
                 val header = envelope.header
                     ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
@@ -92,6 +97,17 @@ class OkHttpDaeguBusRemoteDataSource(
     private fun parseVehicles(items: JsonElement): RemoteResult<List<VehicleSnapshot>> {
         if (!items.isJsonArray) return RemoteResult.Failure(BusDataError.MalformedResponse)
         return RemoteResult.Success(items.asJsonArray.mapNotNull(::parseVehicle))
+    }
+
+    private fun hasVerifiedEnvelopeTypes(root: JsonElement): Boolean {
+        if (!root.isJsonObject) return false
+        val header = root.asJsonObject.get("header")?.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return false
+        val body = root.asJsonObject.get("body")?.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return false
+        val resultCode = header.get("resultCode")?.takeIf(JsonElement::isJsonPrimitive)?.asJsonPrimitive ?: return false
+        val resultMsg = header.get("resultMsg")?.takeIf(JsonElement::isJsonPrimitive)?.asJsonPrimitive ?: return false
+        val success = header.get("success")?.takeIf(JsonElement::isJsonPrimitive)?.asJsonPrimitive ?: return false
+        val items = body.get("items") ?: return false
+        return resultCode.isString && resultMsg.isString && success.isBoolean && !items.isJsonNull
     }
 
     private fun parseVehicle(element: JsonElement): VehicleSnapshot? {

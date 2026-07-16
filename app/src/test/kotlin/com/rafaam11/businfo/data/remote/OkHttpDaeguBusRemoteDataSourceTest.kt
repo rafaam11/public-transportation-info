@@ -100,6 +100,18 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         }
     }
 
+    @Test fun requiredHeaderScalarsMustHaveVerifiedJsonTypes() = runTest {
+        listOf(
+            headerEnvelope(resultCode = "0", resultMsg = "\"success\"", success = "true"),
+            headerEnvelope(resultCode = "\"0000\"", resultMsg = "true", success = "true"),
+            headerEnvelope(resultCode = "\"0000\"", resultMsg = "\"success\"", success = "\"true\""),
+        ).forEach { response ->
+            server.enqueue(MockResponse().setBody(response))
+
+            assertEquals(RemoteResult.Failure(BusDataError.MalformedResponse), source.validateKey("secret"))
+        }
+    }
+
     private companion object {
         const val BASIC_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
@@ -127,6 +139,11 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         fun successEnvelope(items: String) = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":0,"items":$items}}
+        """
+
+        fun headerEnvelope(resultCode: String, resultMsg: String, success: String) = """
+            {"header":{"resultCode":$resultCode,"resultMsg":$resultMsg,"success":$success},
+             "body":{"totalCount":0,"items":{"route":[],"bs":[],"node":[]}}}
         """
     }
 }
