@@ -4,9 +4,11 @@ import com.google.gson.JsonElement
 
 internal object SensitiveNamePolicy {
     private val sensitive = Regex("(?i)(service.?key|token|secret|vehicle.?no|plate)")
+    private val daeguVehicleNumber = Regex("(?i)^vhcNo\\d*$")
     private val serviceKeyAlias = Regex("(?i)service[._ -]?key")
 
-    fun isSensitive(name: String): Boolean = sensitive.containsMatchIn(name)
+    fun isSensitive(name: String): Boolean =
+        sensitive.containsMatchIn(name) || daeguVehicleNumber.matches(name)
 
     fun isServiceKeyAlias(name: String): Boolean = serviceKeyAlias.matches(name)
 }

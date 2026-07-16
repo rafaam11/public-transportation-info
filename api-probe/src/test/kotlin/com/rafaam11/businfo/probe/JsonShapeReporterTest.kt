@@ -56,4 +56,14 @@ class JsonShapeReporterTest {
         assertFalse(report.contains("do-not-render"))
         assertFalse(report.contains("nested"))
     }
+
+    @Test
+    fun masksDaeguAbbreviatedVehicleNumberField() {
+        val json = JsonParser.parseString("""{"vhcNo2":"5067"}""")
+
+        val report = JsonShapeReporter.render(json)
+
+        assertTrue(report.contains("$.vhcNo2 | string | [redacted]"))
+        assertFalse(report.contains("5067"))
+    }
 }
