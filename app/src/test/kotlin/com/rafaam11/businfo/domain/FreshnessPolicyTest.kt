@@ -12,6 +12,11 @@ class FreshnessPolicyTest {
         FreshnessPolicy.classify(now.minusSeconds(15), now),
     )
 
+    @Test fun fifteenSecondsAndOneMillisecondIsDelayed() = assertEquals(
+        DataFreshness.DELAYED,
+        FreshnessPolicy.classify(now.minusSeconds(15).minusMillis(1), now),
+    )
+
     @Test fun sixteenSecondsIsDelayed() = assertEquals(
         DataFreshness.DELAYED,
         FreshnessPolicy.classify(now.minusSeconds(16), now),
@@ -20,6 +25,11 @@ class FreshnessPolicyTest {
     @Test fun thirtySecondsIsDelayed() = assertEquals(
         DataFreshness.DELAYED,
         FreshnessPolicy.classify(now.minusSeconds(30), now),
+    )
+
+    @Test fun thirtySecondsAndOneMillisecondIsStale() = assertEquals(
+        DataFreshness.STALE,
+        FreshnessPolicy.classify(now.minusSeconds(30).minusMillis(1), now),
     )
 
     @Test fun thirtyOneSecondsIsStale() = assertEquals(

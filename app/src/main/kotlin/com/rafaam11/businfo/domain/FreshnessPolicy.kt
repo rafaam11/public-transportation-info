@@ -6,10 +6,11 @@ import java.time.Instant
 object FreshnessPolicy {
     fun classify(observedAt: Instant?, now: Instant): DataFreshness {
         if (observedAt == null) return DataFreshness.UNAVAILABLE
-        val ageSeconds = Duration.between(observedAt, now).seconds.coerceAtLeast(0)
+        val measuredAge = Duration.between(observedAt, now)
+        val age = if (measuredAge.isNegative) Duration.ZERO else measuredAge
         return when {
-            ageSeconds <= 15 -> DataFreshness.FRESH
-            ageSeconds <= 30 -> DataFreshness.DELAYED
+            age <= Duration.ofSeconds(15) -> DataFreshness.FRESH
+            age <= Duration.ofSeconds(30) -> DataFreshness.DELAYED
             else -> DataFreshness.STALE
         }
     }

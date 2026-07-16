@@ -2,7 +2,11 @@ package com.rafaam11.businfo.domain
 
 sealed interface PollResult {
     data object Success : PollResult
-    data class TransientFailure(val consecutiveCount: Int) : PollResult
+    data class TransientFailure(val consecutiveCount: Int) : PollResult {
+        init {
+            require(consecutiveCount > 0)
+        }
+    }
     data object AuthenticationFailure : PollResult
     data object QuotaExceeded : PollResult
 }
