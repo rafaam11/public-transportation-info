@@ -4,6 +4,12 @@ import com.rafaam11.businfo.domain.BusDataError
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -71,6 +77,53 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals(RemoteResult.Success(emptyList<Any>()), source.vehicles("secret", "3000814001"))
     }
 
+    @Test fun partiallyValidVehicleItemsDiscardOnlyInvalidRows() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope("[$VALID_VEHICLE,{\"routeId\":\"\"}]")))
+
+        val result = source.vehicles("secret", "3000814001")
+
+        assertTrue(result is RemoteResult.Success)
+        assertEquals("3000814001", (result as RemoteResult.Success).value.single().routeId)
+    }
+
+    @Test fun whollyInvalidNonemptyVehicleItemsAreMalformed() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope("[{\"routeId\":\"\"},{\"xPos\":128.6}]")))
+
+        assertEquals(
+            RemoteResult.Failure(BusDataError.MalformedResponse),
+            source.vehicles("secret", "3000814001"),
+        )
+    }
+
+    @Test fun cancellingCoroutineCancelsRealCallAndFreesDispatcherForNextRequest() = runBlocking {
+        val dispatcher = okhttp3.Dispatcher().apply {
+            maxRequests = 1
+            maxRequestsPerHost = 1
+        }
+        val cancellableSource = OkHttpDaeguBusRemoteDataSource(
+            client = OkHttpClient.Builder()
+                .dispatcher(dispatcher)
+                .callTimeout(10, TimeUnit.SECONDS)
+                .build(),
+            baseUrl = server.url("/"),
+            clock = Clock.fixed(Instant.parse("2026-07-16T12:00:00Z"), ZoneOffset.UTC),
+        )
+        server.enqueue(MockResponse().setHeadersDelay(3, TimeUnit.SECONDS).setBody(BASIC_SUCCESS))
+        server.enqueue(MockResponse().setBody(BASIC_SUCCESS))
+
+        val first = launch(Dispatchers.Default) { cancellableSource.validateKey("cancelled") }
+        server.takeRequest(2, TimeUnit.SECONDS) ?: error("first request was not received")
+        val cancelStartedAt = System.nanoTime()
+        first.cancelAndJoin()
+        val cancelElapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - cancelStartedAt)
+        val second = async(Dispatchers.Default) { cancellableSource.validateKey("next") }
+        val secondRequest = server.takeRequest(2, TimeUnit.SECONDS)
+
+        assertTrue("cancellation took $cancelElapsedMillis ms", cancelElapsedMillis < 2_000)
+        assertTrue("second request stayed queued behind cancelled call", secondRequest != null)
+        assertEquals(RemoteResult.Success(Unit), second.await())
+    }
+
     @Test fun sensitiveVehicleFieldIsDiscardedAtParsingBoundary() = runTest {
         server.enqueue(MockResponse().setBody(VEHICLE_SUCCESS))
 
@@ -123,6 +176,7 @@ class OkHttpDaeguBusRemoteDataSourceTest {
              "arTime":"45","seq":12,"bsId":"7011000100","xPos":128.6,"yPos":35.8,
              "busTCd2":"1","busTCd3":"2","vhcNo2":"sensitive-vehicle-id"}]}}
         """
+        const val VALID_VEHICLE = """{"routeId":"3000814001","routeNo":"814","moveDir":"0","arTime":"45","seq":12,"bsId":"7011000100","xPos":128.6,"yPos":35.8,"busTCd2":"1","busTCd3":"2"}"""
         const val EMPTY_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":0,"items":[]}}

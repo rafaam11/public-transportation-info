@@ -9,12 +9,14 @@ import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.VehicleSnapshot
 import java.io.IOException
 import java.time.Clock
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import kotlin.coroutines.resumeWithException
 
 class OkHttpDaeguBusRemoteDataSource(
     private val client: OkHttpClient,
@@ -47,46 +49,43 @@ class OkHttpDaeguBusRemoteDataSource(
         serviceKey: String,
         parameters: Map<String, String>,
     ): RemoteResult<JsonElement> = try {
-        withContext(Dispatchers.IO) {
-            val urlBuilder = baseUrl.newBuilder()
-                .addPathSegment(endpoint)
-                .addQueryParameter("serviceKey", serviceKey)
-            parameters.forEach { (name, value) -> urlBuilder.addQueryParameter(name, value) }
-            val call = client.newCall(Request.Builder().url(urlBuilder.build()).get().build())
+        val urlBuilder = baseUrl.newBuilder()
+            .addPathSegment(endpoint)
+            .addQueryParameter("serviceKey", serviceKey)
+        parameters.forEach { (name, value) -> urlBuilder.addQueryParameter(name, value) }
+        val call = client.newCall(Request.Builder().url(urlBuilder.build()).get().build())
 
-            call.execute().use { response ->
-                ensureActive()
-                if (!response.isSuccessful) {
-                    return@withContext RemoteResult.Failure(BusDataError.ServiceUnavailable)
-                }
-                val responseBody = response.body
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val root = JsonParser.parseReader(responseBody.charStream())
-                if (!hasVerifiedEnvelopeTypes(root)) {
-                    return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                }
-                val envelope = gson.fromJson(root, Envelope::class.java)
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val header = envelope.header
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val body = envelope.body
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val code = header.resultCode
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val message = header.resultMsg
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                val success = header.success
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                if (!success || code != SUCCESS_CODE) {
-                    return@withContext RemoteResult.Failure(classify(code, message))
-                }
-                val items = body.items
-                    ?: return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                if (items.isJsonNull) {
-                    return@withContext RemoteResult.Failure(BusDataError.MalformedResponse)
-                }
-                RemoteResult.Success(items)
+        call.await().use { response ->
+            if (!response.isSuccessful) {
+                return RemoteResult.Failure(BusDataError.ServiceUnavailable)
             }
+            val responseBody = response.body
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val root = JsonParser.parseReader(responseBody.charStream())
+            if (!hasVerifiedEnvelopeTypes(root)) {
+                return RemoteResult.Failure(BusDataError.MalformedResponse)
+            }
+            val envelope = gson.fromJson(root, Envelope::class.java)
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val header = envelope.header
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val body = envelope.body
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val code = header.resultCode
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val message = header.resultMsg
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            val success = header.success
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            if (!success || code != SUCCESS_CODE) {
+                return RemoteResult.Failure(classify(code, message))
+            }
+            val items = body.items
+                ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+            if (items.isJsonNull) {
+                return RemoteResult.Failure(BusDataError.MalformedResponse)
+            }
+            RemoteResult.Success(items)
         }
     } catch (_: IOException) {
         RemoteResult.Failure(BusDataError.NetworkUnavailable)
@@ -96,7 +95,31 @@ class OkHttpDaeguBusRemoteDataSource(
 
     private fun parseVehicles(items: JsonElement): RemoteResult<List<VehicleSnapshot>> {
         if (!items.isJsonArray) return RemoteResult.Failure(BusDataError.MalformedResponse)
-        return RemoteResult.Success(items.asJsonArray.mapNotNull(::parseVehicle))
+        val array = items.asJsonArray
+        if (array.isEmpty) return RemoteResult.Success(emptyList())
+        val vehicles = array.mapNotNull(::parseVehicle)
+        return if (vehicles.isEmpty()) {
+            RemoteResult.Failure(BusDataError.MalformedResponse)
+        } else {
+            RemoteResult.Success(vehicles)
+        }
+    }
+
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, exception: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(exception)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (continuation.isActive) {
+                    continuation.resume(response) { _, value, _ -> value.close() }
+                } else {
+                    response.close()
+                }
+            }
+        })
     }
 
     private fun hasVerifiedEnvelopeTypes(root: JsonElement): Boolean {

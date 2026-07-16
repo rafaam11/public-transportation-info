@@ -1,11 +1,32 @@
 package com.rafaam11.businfo
 
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FoundationContractTest {
     @Test
     fun productionPackageIsStable() {
         assertEquals("com.rafaam11.businfo", BuildConfig.APPLICATION_ID)
+    }
+
+    @Test
+    fun credentialDraftAndBackupsStayInsideApprovedBoundary() {
+        val sourceRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "src/main").isDirectory) cwd else File(cwd, "app")
+        }
+        val screen = File(sourceRoot, "src/main/kotlin/com/rafaam11/businfo/ui/VehicleListScreen.kt").readText()
+        val manifest = File(sourceRoot, "src/main/AndroidManifest.xml").readText()
+        val legacyRules = File(sourceRoot, "src/main/res/xml/backup_rules.xml").takeIf(File::isFile)?.readText().orEmpty()
+        val extractionRules = File(sourceRoot, "src/main/res/xml/data_extraction_rules.xml").takeIf(File::isFile)?.readText().orEmpty()
+
+        assertFalse(screen.contains("rememberSaveable"))
+        assertTrue(manifest.contains("android:fullBackupContent=\"@xml/backup_rules\""))
+        assertTrue(manifest.contains("android:dataExtractionRules=\"@xml/data_extraction_rules\""))
+        assertTrue(legacyRules.contains("domain=\"sharedpref\" path=\"credentials.xml\""))
+        val credentialExclusion = Regex.escape("domain=\"sharedpref\" path=\"credentials.xml\"").toRegex()
+        assertEquals(2, credentialExclusion.findAll(extractionRules).count())
     }
 }

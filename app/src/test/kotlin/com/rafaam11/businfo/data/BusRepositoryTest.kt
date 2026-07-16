@@ -89,6 +89,19 @@ class BusRepositoryTest {
         assertEquals(now, second.retained?.fetchedAt)
     }
 
+    @Test fun whollyMalformedRefreshRetainsLastSuccess() = runTest {
+        credentials.write("saved-key")
+        remote.vehicleResults.add(RemoteResult.Success(listOf(vehicle)))
+        remote.vehicleResults.add(RemoteResult.Failure(BusDataError.MalformedResponse))
+        repository.refreshVehicles()
+
+        val malformed = repository.refreshVehicles() as VehicleLoadResult.Failure
+
+        assertEquals(BusDataError.MalformedResponse, malformed.error)
+        assertEquals(listOf(vehicle), malformed.retained?.vehicles)
+        assertEquals(now, malformed.retained?.fetchedAt)
+    }
+
     @Test fun successfulEmptyResponseReplacesPreviousVehicles() = runTest {
         credentials.write("saved-key")
         remote.vehicleResults.add(RemoteResult.Success(listOf(vehicle)))
