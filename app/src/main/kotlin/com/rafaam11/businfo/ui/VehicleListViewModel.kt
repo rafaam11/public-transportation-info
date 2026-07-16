@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 class VehicleListViewModel(
     private val repository: BusRepository,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<VehicleListUiState>(VehicleListUiState.Starting)
     val uiState: StateFlow<VehicleListUiState> = _uiState.asStateFlow()

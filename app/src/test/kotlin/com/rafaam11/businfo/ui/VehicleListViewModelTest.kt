@@ -10,10 +10,14 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -141,6 +145,7 @@ class VehicleListViewModelTest {
 
     @Test fun duplicateRefreshWhileLoadingIsIgnored() = runTest {
         val fixture = fixture(savedKey = "saved-key")
+        fixture.remote.vehicleResults.add(CompletableDeferred(RemoteResult.Success(listOf(vehicle))))
         val pending = CompletableDeferred<RemoteResult<List<VehicleSnapshot>>>()
         fixture.remote.vehicleResults.add(pending)
         val viewModel = VehicleListViewModel(fixture.repository, StandardTestDispatcher(testScheduler))
@@ -150,7 +155,7 @@ class VehicleListViewModelTest {
         viewModel.refresh()
         runCurrent()
 
-        assertEquals(1, fixture.remote.vehicleRequests.size)
+        assertEquals(2, fixture.remote.vehicleRequests.size)
         pending.complete(RemoteResult.Success(listOf(vehicle)))
         runCurrent()
     }
@@ -184,6 +189,30 @@ class VehicleListViewModelTest {
 
         assertEquals(VehicleListUiState.NeedsKey(), viewModel.uiState.value)
         assertFalse(fixture.repository.savedKeyExists())
+    }
+
+    @Test fun clearKeyCancelsValidationBeforeCredentialCanBeSaved() = runTest {
+        val mainDispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            val fixture = fixture()
+            val pending = CompletableDeferred<RemoteResult<Unit>>()
+            fixture.remote.validationResults.add(pending)
+            val viewModel = VehicleListViewModel(fixture.repository)
+
+            viewModel.submitKey("candidate")
+            runCurrent()
+            viewModel.clearKey()
+            pending.complete(RemoteResult.Success(Unit))
+            runCurrent()
+
+            assertTrue(fixture.remote.validationStarted.isCompleted)
+            assertEquals(Dispatchers.Main, fixture.remote.validationDispatcher)
+            assertNull(fixture.credentials.read())
+            assertEquals(VehicleListUiState.NeedsKey(), viewModel.uiState.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     private fun fixture(savedKey: String? = null): Fixture {
@@ -223,9 +252,13 @@ class VehicleListViewModelTest {
         val vehicleResults = ArrayDeque<CompletableDeferred<RemoteResult<List<VehicleSnapshot>>>>()
         val validatedKeys = mutableListOf<String>()
         val vehicleRequests = mutableListOf<Pair<String, String>>()
+        val validationStarted = CompletableDeferred<Unit>()
+        var validationDispatcher: Any? = null
 
         override suspend fun validateKey(serviceKey: String): RemoteResult<Unit> {
             validatedKeys += serviceKey
+            validationDispatcher = currentCoroutineContext()[kotlin.coroutines.ContinuationInterceptor]
+            validationStarted.complete(Unit)
             return validationResults.removeFirst().await()
         }
 
