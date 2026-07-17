@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.navigation.compose)
     implementation(libs.naver.map)
+    implementation(libs.glance.appwidget)
     ksp(libs.room.compiler)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

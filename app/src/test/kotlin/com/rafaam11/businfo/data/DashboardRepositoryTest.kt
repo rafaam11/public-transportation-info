@@ -79,6 +79,21 @@ class DashboardRepositoryTest {
         assertEquals(now, local.arrivals[CommuteSlot.MORNING]!!.fetchedAt)
     }
 
+    @Test fun `successful arrival write notifies dashboard observers once`() = runTest {
+        local.favorites[CommuteSlot.MORNING] = favorite
+        var notifications = 0
+        val notifyingRepository = DashboardRepository(
+            credentials,
+            remote,
+            local,
+            Clock.fixed(now, ZoneOffset.UTC),
+            DashboardUpdateNotifier { notifications++ },
+        )
+
+        assertEquals(null, notifyingRepository.refreshFavorite(CommuteSlot.MORNING))
+        assertEquals(1, notifications)
+    }
+
     private class MemoryCredential(private var key: String?) : CredentialStore {
         override fun read() = key
         override fun write(serviceKey: String) { key = serviceKey }

@@ -42,11 +42,20 @@ interface DashboardDataSource {
     suspend fun cachedDirections(route: RouteSummary): List<DirectionOption>
 }
 
+fun interface DashboardUpdateNotifier {
+    suspend fun notifyChanged()
+
+    companion object {
+        val NONE = DashboardUpdateNotifier {}
+    }
+}
+
 class DashboardRepository(
     private val credentials: CredentialStore,
     private val remote: DaeguBusRemoteDataSource,
     private val local: BusLocalDataSource,
     private val clock: Clock,
+    private val updateNotifier: DashboardUpdateNotifier = DashboardUpdateNotifier.NONE,
 ) : DashboardDataSource {
     override fun observeDashboard(): Flow<List<FavoriteDashboardSnapshot>> = local.observeDashboard()
 
@@ -112,6 +121,7 @@ class DashboardRepository(
                     .sortedBy { it.arrivalSeconds }
                     .take(2)
                 local.saveArrival(slot, ArrivalSnapshot(arrivals, clock.instant()))
+                updateNotifier.notifyChanged()
                 null
             }
             is RemoteResult.Failure -> result.error
