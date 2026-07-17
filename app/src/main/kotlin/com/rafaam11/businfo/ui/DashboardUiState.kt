@@ -7,7 +7,6 @@ import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
-import com.rafaam11.businfo.domain.VehicleBatch
 
 sealed interface AppUiState {
     data object Starting : AppUiState
@@ -39,21 +38,6 @@ data class SetupUiState(
     val directions: List<DirectionOption> = emptyList(),
     val selectedDirection: DirectionOption? = null,
     val loading: Boolean = false,
-    val error: BusDataError? = null,
-)
-
-data class NamedVehicle(
-    val directionLabel: String,
-    val stopName: String,
-    val sequence: Int?,
-    val arrivalState: String?,
-)
-
-data class DetailUiState(
-    val selection: FavoriteSelection? = null,
-    val batch: VehicleBatch? = null,
-    val vehicles: List<NamedVehicle> = emptyList(),
-    val refreshing: Boolean = false,
     val error: BusDataError? = null,
 )
 

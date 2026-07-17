@@ -223,32 +223,6 @@ private fun SelectionRow(title: String, subtitle: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun RouteDetailScreen(state: DetailUiState, onBack: () -> Unit, onRefresh: () -> Unit) {
-    Scaffold(topBar = { TopAppBar(
-        title = { Text(state.selection?.let { "${it.routeNo}번 차량" } ?: "차량 상세") },
-        navigationIcon = { TextButton(onClick = onBack) { Text("뒤로") } },
-    ) }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            state.selection?.let { item { StatusBanner("${it.stopName} · ${it.directionLabel}") } }
-            state.error?.let { item { DashboardErrorBanner(it.userMessage()) } }
-            if (state.refreshing && state.batch == null) item { CircularProgressIndicator() }
-            if (!state.refreshing && state.vehicles.isEmpty()) item { Text("현재 이 방향의 운행 차량 없음") }
-            items(state.vehicles) { vehicle ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text(vehicle.stopName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("${vehicle.directionLabel} · ${vehicle.sequence?.let { "${it}번째 정류장" } ?: "순서 미확인"}")
-                        vehicle.arrivalState?.let { Text("도착 정보 $it") }
-                    }
-                }
-            }
-            item { Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth(), enabled = !state.refreshing) { Text("새로고침") } }
-        }
-    }
-}
-
 @Composable private fun StatusBanner(text: String) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))) {
         Text(text, Modifier.fillMaxWidth().padding(14.dp))

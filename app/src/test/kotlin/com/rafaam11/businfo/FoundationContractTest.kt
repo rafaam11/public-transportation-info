@@ -61,4 +61,22 @@ class FoundationContractTest {
         assertFalse(manifest.contains("android.permission.ACCESS_FINE_LOCATION"))
         assertFalse(manifest.contains("android.permission.ACCESS_COARSE_LOCATION"))
     }
+
+    @Test
+    fun dashboardNavigationTargetsRealtimeMap() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
+        val dashboardViewModel = File(
+            repoRoot,
+            "app/src/main/kotlin/com/rafaam11/businfo/ui/BusAppViewModel.kt",
+        ).readText()
+
+        assertTrue(app.contains("map/{slot}"))
+        assertFalse(app.contains("detail/{slot}"))
+        assertTrue(app.contains("realtimeMapViewModel.setVisible"))
+        assertFalse(dashboardViewModel.contains("detailState"))
+        assertFalse(dashboardViewModel.contains("loadDetail"))
+    }
 }

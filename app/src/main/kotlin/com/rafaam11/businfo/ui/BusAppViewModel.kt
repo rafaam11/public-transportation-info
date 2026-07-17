@@ -12,7 +12,6 @@ import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
-import com.rafaam11.businfo.domain.VehicleLoadResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,8 +29,6 @@ class BusAppViewModel(
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
     private val _setupState = MutableStateFlow(SetupUiState())
     val setupState: StateFlow<SetupUiState> = _setupState.asStateFlow()
-    private val _detailState = MutableStateFlow(DetailUiState())
-    val detailState: StateFlow<DetailUiState> = _detailState.asStateFlow()
 
     private var snapshots: List<FavoriteDashboardSnapshot> = emptyList()
     private var errors = emptyMap<CommuteSlot, String>()
@@ -144,35 +141,6 @@ class BusAppViewModel(
 
     fun deleteFavorite(slot: CommuteSlot) {
         viewModelScope.launch(dispatcher) { dashboard.deleteFavorite(slot) }
-    }
-
-    fun loadDetail(slot: CommuteSlot) {
-        _detailState.value = DetailUiState(refreshing = true)
-        viewModelScope.launch(dispatcher) {
-            val selection = dashboard.favorite(slot)
-            if (selection == null) {
-                _detailState.value = DetailUiState(error = BusDataError.MalformedResponse)
-                return@launch
-            }
-            val result = dashboard.refreshRouteVehicles(slot)
-            val batch = when (result) {
-                is VehicleLoadResult.Success -> result.batch
-                is VehicleLoadResult.Failure -> result.retained
-            }
-            val route = dashboard.routeSummary(selection.routeId)
-            val stops = route?.let { dashboard.cachedDirections(it) }.orEmpty().flatMap(DirectionOption::stops)
-            val stopNames = stops.associate { it.stopId to it.stopName }
-            val vehicles = batch?.vehicles.orEmpty().filter { it.moveDirection == selection.directionCode }.map {
-                NamedVehicle(selection.directionLabel, stopNames[it.stopId] ?: "정류장 정보 없음", it.stopSequence, it.arrivalState)
-            }
-            _detailState.value = DetailUiState(
-                selection = selection,
-                batch = batch,
-                vehicles = vehicles,
-                refreshing = false,
-                error = (result as? VehicleLoadResult.Failure)?.error,
-            )
-        }
     }
 
     private fun publishCards() {
