@@ -45,7 +45,7 @@ class RealtimeMapViewModel(
     private var bootstrapJob: Job? = null
     private var pollingJob: Job? = null
     private var freshnessJob: Job? = null
-    private var terminalPollingError: Pair<CommuteSlot, BusDataError>? = null
+    private var terminalPollingError: BusDataError? = null
     private val mapAuthJob = viewModelScope.launch(dispatcher) {
         mapAuthMonitor.errorCode.filterNotNull().collect { code ->
             pollingJob?.cancel()
@@ -67,12 +67,11 @@ class RealtimeMapViewModel(
         bootstrapJob?.cancel()
         pollingJob?.cancel()
         freshnessJob?.cancel()
-        if (terminalPollingError?.first != slot) terminalPollingError = null
         openedSlot = slot
         _uiState.value = RealtimeMapUiState(
             loadingGeometry = true,
             mapErrorCode = mapAuthMonitor.errorCode.value,
-            vehicleError = terminalPollingError?.second,
+            vehicleError = terminalPollingError,
         )
         bootstrapJob = viewModelScope.launch(dispatcher) {
             val selection = dashboard.favorite(slot)
@@ -169,7 +168,7 @@ class RealtimeMapViewModel(
         if (
             _uiState.value.geometry == null ||
             _uiState.value.mapErrorCode != null ||
-            terminalPollingError?.first == selection.slot ||
+            terminalPollingError != null ||
             !visible ||
             pollingJob?.isActive == true
         ) return
@@ -186,11 +185,11 @@ class RealtimeMapViewModel(
                         publishBatch(result.retained, result.error)
                         val pollResult = when (result.error) {
                             BusDataError.InvalidCredential -> {
-                                terminalPollingError = selection.slot to result.error
+                                terminalPollingError = result.error
                                 PollResult.AuthenticationFailure
                             }
                             BusDataError.RateLimited -> {
-                                terminalPollingError = selection.slot to result.error
+                                terminalPollingError = result.error
                                 PollResult.QuotaExceeded
                             }
                             else -> PollResult.TransientFailure(++consecutiveFailures)

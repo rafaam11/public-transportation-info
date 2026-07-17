@@ -142,6 +142,28 @@ class RealtimeMapViewModelTest {
         fixture.viewModel.close()
     }
 
+    @Test fun `terminal service errors remain stopped when switching commute slots`() = runTest {
+        listOf(BusDataError.InvalidCredential, BusDataError.RateLimited).forEach { error ->
+            val fixture = fixture(
+                testScheduler,
+                mutableListOf(VehicleLoadResult.Failure(error, null)),
+            )
+            fixture.viewModel.setVisible(true)
+            fixture.viewModel.open(CommuteSlot.MORNING)
+            runCurrent()
+            assertEquals(1, fixture.vehicles.calls)
+
+            fixture.viewModel.close()
+            fixture.viewModel.setVisible(true)
+            fixture.viewModel.open(CommuteSlot.EVENING)
+            runCurrent()
+
+            assertEquals(1, fixture.vehicles.calls)
+            assertEquals(error, fixture.viewModel.uiState.value.vehicleError)
+            fixture.viewModel.close()
+        }
+    }
+
     @Test fun `map authentication error remains blocking when the destination opens`() = runTest {
         val fixture = fixture(testScheduler)
         fixture.mapAuthMonitor.report("401")
