@@ -41,4 +41,24 @@ class FoundationContractTest {
         assertTrue(catalog.contains("compose-ui-test-manifest = { module = \"androidx.compose.ui:ui-test-manifest\" }"))
         assertTrue(appBuild.contains("debugImplementation(libs.compose.ui.test.manifest)"))
     }
+
+    @Test
+    fun naverMapKeyIsInjectedWithoutACommittedLiteral() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val catalog = File(repoRoot, "gradle/libs.versions.toml").readText()
+        val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
+        val manifest = File(repoRoot, "app/src/main/AndroidManifest.xml").readText()
+
+        assertTrue(catalog.contains("naverMap = \"3.23.3\""))
+        assertTrue(catalog.contains("naver-map = { module = \"com.naver.maps:map-sdk\""))
+        assertTrue(appBuild.contains("NAVER_MAP_NCP_KEY_ID"))
+        assertTrue(appBuild.contains("implementation(libs.naver.map)"))
+        assertTrue(manifest.contains("android:name=\"com.naver.maps.map.NCP_KEY_ID\""))
+        assertTrue(manifest.contains("android:value=\"\${naverMapNcpKeyId}\""))
+        assertFalse(manifest.contains("YOUR_NCP_KEY"))
+        assertFalse(manifest.contains("android.permission.ACCESS_FINE_LOCATION"))
+        assertFalse(manifest.contains("android.permission.ACCESS_COARSE_LOCATION"))
+    }
 }

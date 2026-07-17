@@ -11,6 +11,7 @@ coroutines = "1.11.0"
 room = "2.8.4"
 ksp = "2.3.10"
 navigation = "2.9.8"
+naverMap = "3.23.3"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -32,6 +33,7 @@ room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+naver-map = { module = "com.naver.maps:map-sdk", version.ref = "naverMap" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

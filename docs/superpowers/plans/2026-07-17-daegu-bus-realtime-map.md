@@ -135,7 +135,7 @@ Run:
 .\gradlew.bat :app:testDebugUnitTest --tests com.rafaam11.businfo.FoundationContractTest.naverMapKeyIsInjectedWithoutACommittedLiteral :app:assembleDebug
 ```
 
-Expected: BUILD SUCCESSFUL. Confirm `git grep -n "NAVER_MAP_NCP_KEY_ID="` returns no committed key value.
+Expected: BUILD SUCCESSFUL. Confirm `git grep -n -E "NAVER_MAP_NCP_KEY_ID=[A-Za-z0-9_-]{10,}" -- ':!docs/superpowers/plans/2026-07-17-daegu-bus-realtime-map.md'` returns no committed key-like value; documentation placeholders are allowed.
 
 - [ ] **Step 5: Commit the SDK configuration**
 

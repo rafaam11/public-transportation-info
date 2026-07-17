@@ -10,6 +10,10 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:usesCleartextTraffic="false">
+        <meta-data
+            android:name="com.naver.maps.map.NCP_KEY_ID"
+            android:value="${naverMapNcpKeyId}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">

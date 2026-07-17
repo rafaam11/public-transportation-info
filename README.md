@@ -1,5 +1,15 @@
 # 대구 버스 정보
 
+## 네이버 지도 로컬 설정
+
+NAVER Cloud Maps 애플리케이션에서 Dynamic Map을 활성화하고 Android 패키지
+`com.rafaam11.businfo`를 등록한다. 발급된 NCP Key ID는 Git에 넣지 않고 프로젝트 루트의
+ignored `local.properties`에 다음 이름으로만 저장한다.
+
+`NAVER_MAP_NCP_KEY_ID=<발급된 Key ID>`
+
+값이 없으면 APK는 빌드되지만 실기기 지도 인증은 실패 상태로 표시된다.
+
 ## 실기기 APK 인수 테스트
 
 테스트에는 공공데이터포털에서 발급받은 `대구광역시_대구버스정보시스템` 일반 인증키의 **Decoding 값**과 Android 실기기가 필요하다. 이 키를 명령줄, 스크린샷, 이슈, 로그 또는 Git에 남기지 않는다.
