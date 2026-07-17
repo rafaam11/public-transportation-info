@@ -4,12 +4,15 @@
 
 # Android and Gradle local/build artifacts
 .gradle/
+.kotlin/
 .idea/
 build/
 **/build/
 local.properties
 *.jks
 *.keystore
+hs_err_pid*.log
+replay_pid*.log
 
 # Local API contract evidence and secrets
 .local/

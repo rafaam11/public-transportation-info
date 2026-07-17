@@ -5,12 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.naver.maps.map.NaverMapSdk
 import com.rafaam11.businfo.ui.BusAppViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val graph = AppGraph(applicationContext)
+        NaverMapSdk.getInstance(applicationContext).setOnAuthFailedListener { exception ->
+            graph.mapAuthMonitor.report(exception.errorCode)
+        }
         val viewModel = ViewModelProvider(
             this,
             object : ViewModelProvider.Factory {

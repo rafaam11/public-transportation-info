@@ -15,6 +15,7 @@ import com.rafaam11.businfo.domain.PollResult
 import com.rafaam11.businfo.domain.PollingPolicy
 import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleLoadResult
+import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import java.time.Clock
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -30,6 +32,7 @@ class RealtimeMapViewModel(
     private val dashboard: DashboardDataSource,
     private val geometry: RouteGeometryDataSource,
     private val vehicles: VehiclePositionDataSource,
+    private val mapAuthMonitor: MapAuthMonitor,
     private val clock: Clock,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : ViewModel() {
@@ -41,6 +44,18 @@ class RealtimeMapViewModel(
     private var bootstrapJob: Job? = null
     private var pollingJob: Job? = null
     private var freshnessJob: Job? = null
+    private val mapAuthJob = viewModelScope.launch(dispatcher) {
+        mapAuthMonitor.errorCode.filterNotNull().collect { code ->
+            pollingJob?.cancel()
+            freshnessJob?.cancel()
+            pollingJob = null
+            freshnessJob = null
+            _uiState.value = _uiState.value.copy(
+                mapErrorCode = code,
+                visibleVehicles = emptyList(),
+            )
+        }
+    }
 
     fun open(slot: CommuteSlot) {
         if (openedSlot == slot && _uiState.value.selection != null) {
@@ -51,7 +66,10 @@ class RealtimeMapViewModel(
         pollingJob?.cancel()
         freshnessJob?.cancel()
         openedSlot = slot
-        _uiState.value = RealtimeMapUiState(loadingGeometry = true)
+        _uiState.value = RealtimeMapUiState(
+            loadingGeometry = true,
+            mapErrorCode = mapAuthMonitor.errorCode.value,
+        )
         bootstrapJob = viewModelScope.launch(dispatcher) {
             val selection = dashboard.favorite(slot)
             if (selection == null) {
@@ -92,6 +110,10 @@ class RealtimeMapViewModel(
     }
 
     fun retry() {
+        if (_uiState.value.mapErrorCode != null) {
+            mapAuthMonitor.clear()
+            _uiState.value = _uiState.value.copy(mapErrorCode = null)
+        }
         val selection = _uiState.value.selection ?: return
         if (_uiState.value.geometry == null) {
             bootstrapJob?.cancel()
@@ -139,7 +161,12 @@ class RealtimeMapViewModel(
 
     private fun startJobsIfReady() {
         val selection = _uiState.value.selection ?: return
-        if (_uiState.value.geometry == null || !visible || pollingJob?.isActive == true) return
+        if (
+            _uiState.value.geometry == null ||
+            _uiState.value.mapErrorCode != null ||
+            !visible ||
+            pollingJob?.isActive == true
+        ) return
         pollingJob = viewModelScope.launch(dispatcher) {
             var consecutiveFailures = 0
             while (isActive && visible) {

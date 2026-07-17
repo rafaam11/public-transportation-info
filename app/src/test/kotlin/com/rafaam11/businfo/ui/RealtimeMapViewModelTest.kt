@@ -18,6 +18,7 @@ import com.rafaam11.businfo.domain.RouteSummary
 import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleLoadResult
 import com.rafaam11.businfo.domain.VehicleSnapshot
+import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -103,6 +104,20 @@ class RealtimeMapViewModelTest {
         fixture.viewModel.close()
     }
 
+    @Test fun `map authentication error remains blocking when the destination opens`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.mapAuthMonitor.report("401")
+        runCurrent()
+
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+
+        assertEquals("401", fixture.viewModel.uiState.value.mapErrorCode)
+        assertEquals(0, fixture.vehicles.calls)
+        fixture.viewModel.close()
+    }
+
     @Test fun `vehicle mapper derives remaining stops without a persistent identifier`() {
         val batch = VehicleBatch.from(listOf(vehicle(start)), start)
 
@@ -119,16 +134,19 @@ class RealtimeMapViewModelTest {
     ): Fixture {
         val clock = MutableClock(start)
         val vehicles = FakeVehicles(clock, results)
+        val mapAuthMonitor = MapAuthMonitor()
         return Fixture(
             RealtimeMapViewModel(
                 FakeDashboard(selection),
                 FakeGeometry(geometry(), stops),
                 vehicles,
+                mapAuthMonitor,
                 clock,
                 StandardTestDispatcher(scheduler),
             ),
             vehicles,
             clock,
+            mapAuthMonitor,
         )
     }
 
@@ -187,5 +205,6 @@ class RealtimeMapViewModelTest {
         val viewModel: RealtimeMapViewModel,
         val vehicles: FakeVehicles,
         val clock: MutableClock,
+        val mapAuthMonitor: MapAuthMonitor,
     )
 }

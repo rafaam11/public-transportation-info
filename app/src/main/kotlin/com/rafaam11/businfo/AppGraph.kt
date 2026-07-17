@@ -4,11 +4,14 @@ import android.content.Context
 import androidx.room.Room
 import com.rafaam11.businfo.data.BusRepository
 import com.rafaam11.businfo.data.DashboardRepository
+import com.rafaam11.businfo.data.RouteGeometryRepository
+import com.rafaam11.businfo.data.VehiclePositionRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
 import com.rafaam11.businfo.data.local.MIGRATION_1_2
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
+import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -29,4 +32,7 @@ class AppGraph(context: Context) {
 
     val credentialRepository = BusRepository(credentials, remote)
     val dashboardRepository = DashboardRepository(credentials, remote, local, Clock.systemUTC())
+    val routeGeometryRepository = RouteGeometryRepository(credentials, remote, local, Clock.systemUTC())
+    val vehiclePositionRepository = VehiclePositionRepository(credentials, remote, local, Clock.systemUTC())
+    val mapAuthMonitor = MapAuthMonitor()
 }
