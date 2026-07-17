@@ -2,7 +2,9 @@ package com.rafaam11.businfo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.rafaam11.businfo.domain.ArrivalEstimate
 import com.rafaam11.businfo.domain.CommuteSlot
@@ -27,7 +29,7 @@ class DashboardScreenTest {
 
         compose.onNodeWithText("출근").assertIsDisplayed()
         compose.onNodeWithText("퇴근").assertIsDisplayed()
-        compose.onNodeWithText("버스 추가", useUnmergedTree = true).assertIsDisplayed()
+        compose.onAllNodesWithText("버스 추가", useUnmergedTree = true).assertCountEquals(2)
     }
 
     @Test fun configuredCardPrioritizesFirstVehicleAndShowsSecond() {
