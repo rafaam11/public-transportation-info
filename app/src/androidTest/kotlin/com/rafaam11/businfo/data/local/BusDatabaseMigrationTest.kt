@@ -1,0 +1,35 @@
+package com.rafaam11.businfo.data.local
+
+import androidx.room.testing.MigrationTestHelper
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+class BusDatabaseMigrationTest {
+    @get:Rule val helper = MigrationTestHelper(
+        InstrumentationRegistry.getInstrumentation(),
+        BusDatabase::class.java,
+    )
+
+    @Test fun migration1To2PreservesFavoriteAndCreatesGeometryTable() {
+        helper.createDatabase("migration-test", 1).apply {
+            execSQL(
+                "INSERT INTO favorites VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arrayOf("MORNING", "route", "급행8-1", "0", "검단동 방면", "stop", "효동초등학교건너"),
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate("migration-test", 2, true, MIGRATION_1_2).use { db ->
+            db.query("SELECT routeNo FROM favorites WHERE slot = 'MORNING'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("급행8-1", cursor.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM route_geometries").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+        }
+    }
+}

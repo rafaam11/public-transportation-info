@@ -6,6 +6,7 @@ import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.RouteGeometry
 import com.rafaam11.businfo.domain.VehicleBatch
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
@@ -24,4 +25,6 @@ interface BusLocalDataSource {
     suspend fun saveSyncTime(key: String, instant: Instant)
     suspend fun vehicleBatch(routeId: String): VehicleBatch?
     suspend fun saveVehicleBatch(routeId: String, batch: VehicleBatch)
+    suspend fun routeGeometry(routeId: String, moveDirection: String): RouteGeometry?
+    suspend fun saveRouteGeometry(geometry: RouteGeometry)
 }

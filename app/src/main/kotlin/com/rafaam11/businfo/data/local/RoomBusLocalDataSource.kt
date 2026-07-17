@@ -9,6 +9,8 @@ import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.RouteGeometry
+import com.rafaam11.businfo.domain.RouteSegment
 import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleSnapshot
 import java.time.Instant
@@ -51,6 +53,23 @@ class RoomBusLocalDataSource(
     override suspend fun saveVehicleBatch(routeId: String, batch: VehicleBatch) = dao.saveVehicleSnapshot(
         VehicleSnapshotEntity(routeId, gson.toJson(batch.vehicles), batch.fetchedAt.toEpochMilli()),
     )
+    override suspend fun routeGeometry(routeId: String, moveDirection: String): RouteGeometry? =
+        dao.routeGeometry(routeId, moveDirection)?.let { entity ->
+            RouteGeometry(
+                entity.routeId,
+                entity.moveDirection,
+                gson.fromJson(entity.segmentsJson, ROUTE_SEGMENTS_TYPE),
+                Instant.ofEpochMilli(entity.fetchedAtEpochMillis),
+            )
+        }
+    override suspend fun saveRouteGeometry(geometry: RouteGeometry) = dao.saveRouteGeometry(
+        RouteGeometryEntity(
+            geometry.routeId,
+            geometry.moveDirection,
+            gson.toJson(geometry.segments),
+            geometry.fetchedAt.toEpochMilli(),
+        ),
+    )
 
     private fun RouteEntity.toDomain() = RouteSummary(routeId, routeNo, startName, endName, directionNote, reverseDirectionNote)
     private fun RouteSummary.toEntity() = RouteEntity(routeId, routeNo, startName, endName, directionNote, reverseDirectionNote)
@@ -66,5 +85,6 @@ class RoomBusLocalDataSource(
     private companion object {
         val ARRIVAL_LIST_TYPE = object : TypeToken<List<ArrivalEstimate>>() {}.type
         val VEHICLE_LIST_TYPE = object : TypeToken<List<VehicleSnapshot>>() {}.type
+        val ROUTE_SEGMENTS_TYPE = object : TypeToken<List<RouteSegment>>() {}.type
     }
 }

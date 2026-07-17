@@ -6,6 +6,7 @@ import com.rafaam11.businfo.data.BusRepository
 import com.rafaam11.businfo.data.DashboardRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
+import com.rafaam11.businfo.data.local.MIGRATION_1_2
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import java.time.Clock
@@ -21,7 +22,9 @@ class AppGraph(context: Context) {
         clock = Clock.systemUTC(),
     )
 
-    private val database = Room.databaseBuilder(context.applicationContext, BusDatabase::class.java, "bus-info.db").build()
+    private val database = Room.databaseBuilder(context.applicationContext, BusDatabase::class.java, "bus-info.db")
+        .addMigrations(MIGRATION_1_2)
+        .build()
     private val local = RoomBusLocalDataSource(database.dao())
 
     val credentialRepository = BusRepository(credentials, remote)

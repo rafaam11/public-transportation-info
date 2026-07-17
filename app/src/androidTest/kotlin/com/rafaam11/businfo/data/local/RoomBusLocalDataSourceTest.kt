@@ -6,6 +6,9 @@ import com.rafaam11.businfo.domain.ArrivalEstimate
 import com.rafaam11.businfo.domain.ArrivalSnapshot
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.FavoriteSelection
+import com.rafaam11.businfo.domain.GeoPoint
+import com.rafaam11.businfo.domain.RouteGeometry
+import com.rafaam11.businfo.domain.RouteSegment
 import java.time.Instant
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -55,5 +58,21 @@ class RoomBusLocalDataSourceTest {
         val card = local.observeDashboard().first().single()
         assertTrue(card.arrivals.isEmpty())
         assertEquals(Instant.EPOCH.plusSeconds(60), card.fetchedAt)
+    }
+
+    @Test fun routeGeometryRoundTripsAsSeparateSegments() = runTest {
+        val geometry = RouteGeometry(
+            "route", "0",
+            listOf(
+                RouteSegment(listOf("a", "b"), listOf(GeoPoint(128.60, 35.80), GeoPoint(128.61, 35.81))),
+                RouteSegment(listOf("x", "y"), listOf(GeoPoint(128.70, 35.90), GeoPoint(128.71, 35.91))),
+            ),
+            Instant.parse("2026-07-17T12:00:00Z"),
+        )
+
+        local.saveRouteGeometry(geometry)
+
+        assertEquals(geometry, local.routeGeometry("route", "0"))
+        assertEquals(null, local.routeGeometry("route", "1"))
     }
 }

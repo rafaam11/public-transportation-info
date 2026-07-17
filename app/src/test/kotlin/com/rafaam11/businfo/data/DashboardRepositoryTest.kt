@@ -12,6 +12,7 @@ import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.RouteGeometry
 import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleSnapshot
 import java.time.Clock
@@ -114,5 +115,7 @@ class DashboardRepositoryTest {
         override suspend fun saveSyncTime(key: String, instant: Instant) { syncTimes[key] = instant }
         override suspend fun vehicleBatch(routeId: String): VehicleBatch? = null
         override suspend fun saveVehicleBatch(routeId: String, batch: VehicleBatch) = Unit
+        override suspend fun routeGeometry(routeId: String, moveDirection: String): RouteGeometry? = null
+        override suspend fun saveRouteGeometry(geometry: RouteGeometry) = Unit
     }
 }

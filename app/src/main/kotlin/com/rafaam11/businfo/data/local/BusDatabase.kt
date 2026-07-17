@@ -51,6 +51,14 @@ data class VehicleSnapshotEntity(val routeId: String, val vehiclesJson: String, 
 @Entity(tableName = "sync_metadata", primaryKeys = ["syncKey"])
 data class SyncEntity(val syncKey: String, val fetchedAtEpochMillis: Long)
 
+@Entity(tableName = "route_geometries", primaryKeys = ["routeId", "moveDirection"])
+data class RouteGeometryEntity(
+    val routeId: String,
+    val moveDirection: String,
+    val segmentsJson: String,
+    val fetchedAtEpochMillis: Long,
+)
+
 @Dao
 abstract class BusDao {
     @Query("SELECT * FROM routes") abstract suspend fun routes(): List<RouteEntity>
@@ -82,12 +90,17 @@ abstract class BusDao {
     @Query("SELECT * FROM vehicle_snapshots WHERE routeId = :routeId")
     abstract suspend fun vehicleSnapshot(routeId: String): VehicleSnapshotEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun saveVehicleSnapshot(snapshot: VehicleSnapshotEntity)
+
+    @Query("SELECT * FROM route_geometries WHERE routeId = :routeId AND moveDirection = :moveDirection")
+    abstract suspend fun routeGeometry(routeId: String, moveDirection: String): RouteGeometryEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun saveRouteGeometry(geometry: RouteGeometryEntity)
 }
 
 @Database(
     entities = [RouteEntity::class, RouteStopEntity::class, FavoriteEntity::class, ArrivalSnapshotEntity::class,
-        VehicleSnapshotEntity::class, SyncEntity::class],
-    version = 1,
+        VehicleSnapshotEntity::class, SyncEntity::class, RouteGeometryEntity::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class BusDatabase : RoomDatabase() {
