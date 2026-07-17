@@ -12,6 +12,7 @@ import com.rafaam11.businfo.data.local.MIGRATION_1_2
 import com.rafaam11.businfo.data.local.MIGRATION_2_3
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
+import com.rafaam11.businfo.data.remote.AccubusPreciseRemoteDataSource
 import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import com.rafaam11.businfo.widget.CommuteWidgetRepository
 import com.rafaam11.businfo.widget.CommuteWidgetUpdateNotifier
@@ -22,11 +23,18 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 
 class AppGraph private constructor(context: Context) {
+    private val clock = Clock.systemUTC()
+    private val httpClient = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).build()
     private val credentials = SharedPreferencesCredentialStore(context.applicationContext)
     private val remote = OkHttpDaeguBusRemoteDataSource(
-        client = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).build(),
+        client = httpClient,
         baseUrl = "https://apis.data.go.kr/6270000/dbmsapi02/".toHttpUrl(),
-        clock = Clock.systemUTC(),
+        clock = clock,
+    )
+    val preciseVehiclePositionDataSource = AccubusPreciseRemoteDataSource(
+        client = httpClient,
+        baseUrl = "https://accubus.daegu.go.kr:8095/dbms_web_api/".toHttpUrl(),
+        clock = clock,
     )
 
     private val database = Room.databaseBuilder(context.applicationContext, BusDatabase::class.java, "bus-info.db")
@@ -40,16 +48,16 @@ class AppGraph private constructor(context: Context) {
         credentials,
         remote,
         local,
-        Clock.systemUTC(),
+        clock,
         CommuteWidgetUpdateNotifier(context.applicationContext),
     )
     val commuteWidgetRepository = CommuteWidgetRepository(
         dashboardRepository,
         widgetPreferences,
-        Clock.systemUTC(),
+        clock,
     )
-    val routeGeometryRepository = RouteGeometryRepository(credentials, remote, local, Clock.systemUTC())
-    val vehiclePositionRepository = VehiclePositionRepository(credentials, remote, local, Clock.systemUTC())
+    val routeGeometryRepository = RouteGeometryRepository(credentials, remote, local, clock)
+    val vehiclePositionRepository = VehiclePositionRepository(credentials, remote, local, clock)
     val mapAuthMonitor = MapAuthMonitor()
 
     companion object {

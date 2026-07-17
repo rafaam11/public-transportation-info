@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                         graph.dashboardRepository,
                         graph.routeGeometryRepository,
                         graph.vehiclePositionRepository,
+                        graph.preciseVehiclePositionDataSource,
                         graph.mapAuthMonitor,
                         Clock.systemUTC(),
                     ) as T

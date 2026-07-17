@@ -68,7 +68,10 @@ class NaverMapOverlayController(
             marker.position = vehicle.point.toLatLng()
             marker.anchor = PointF(0.5f, 0.5f)
             marker.icon = iconCache.icon(routeNo, palette, selected, density)
-            marker.angle = state.geometry?.let { VehicleHeadingResolver.resolve(vehicle.point, it) } ?: 0f
+            marker.angle = vehicle.headingDegrees?.let { heading ->
+                ((heading - 90f) % 360f + 360f) % 360f
+            } ?: 0f
+            marker.alpha = if (vehicle.delayed) DELAYED_MARKER_ALPHA else 1f
             marker.isFlat = true
             marker.isCaptionPerspectiveEnabled = false
             marker.setCaptionAligns(Align.Bottom)
@@ -136,4 +139,8 @@ class NaverMapOverlayController(
         this?.segments.orEmpty().flatMap(RouteSegment::points)
 
     private fun GeoPoint.toLatLng() = LatLng(latitude, longitude)
+
+    private companion object {
+        const val DELAYED_MARKER_ALPHA = 0.55f
+    }
 }

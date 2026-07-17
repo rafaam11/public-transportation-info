@@ -6,11 +6,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.rafaam11.businfo.domain.CommuteSlot
-import com.rafaam11.businfo.domain.DataFreshness
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.GeoPoint
-import com.rafaam11.businfo.domain.VehicleBatch
-import com.rafaam11.businfo.domain.VehicleSnapshot
+import com.rafaam11.businfo.domain.PreciseSourceHealth
 import java.time.Instant
 import org.junit.Rule
 import org.junit.Test
@@ -27,21 +25,18 @@ class RealtimeMapScreenTest {
         "stop",
         "효동초등학교건너",
     )
-    private val vehicle = VehicleSnapshot(
-        "route", "급행8-1", "0", "nearby", 5, 35.81, 128.61, null, null, null,
-    )
-    private val batch = VehicleBatch.from(
-        listOf(vehicle),
-        Instant.parse("2026-07-17T12:00:00Z"),
-    )
+    private val observedAt = Instant.parse("2026-07-17T12:00:00Z")
     private val normalState = RealtimeMapUiState(
         selection = selection,
-        vehicleBatch = batch,
         visibleVehicles = listOf(
-            MapVehicleUi("snapshot:0", GeoPoint(128.61, 35.81), "동대구역", 5, 2, null),
+            MapVehicleUi(
+                "session:0", GeoPoint(128.61, 35.81), "동대구역", 5, 2, null,
+                observedAt, 0, false, 90f,
+            ),
         ),
-        freshness = DataFreshness.FRESH,
-        dataAgeSeconds = 0,
+        totalOperatingCount = 3,
+        hiddenVehicleCount = 2,
+        preciseSourceHealth = PreciseSourceHealth.HEALTHY,
     )
 
     @Test
@@ -62,14 +57,16 @@ class RealtimeMapScreenTest {
         compose.onNodeWithText("가짜 지도").assertIsDisplayed()
         compose.onNodeWithText("급행8-1 · 검단동 방면").assertIsDisplayed()
         compose.onNodeWithText("내 정류장 · 효동초등학교건너").assertIsDisplayed()
-        compose.onNodeWithText("정상 · 0초 전").assertIsDisplayed()
+        compose.onNodeWithText("전체 운행 3대 · 초정밀 위치 1대").assertIsDisplayed()
+        compose.onNodeWithText("GPS 0초 전").assertIsDisplayed()
     }
 
     @Test
     fun staleStateExplainsWhyMarkersAreHidden() {
         val staleState = normalState.copy(
             visibleVehicles = emptyList(),
-            freshness = DataFreshness.STALE,
+            hiddenVehicleCount = 3,
+            preciseSourceHealth = PreciseSourceHealth.DELAYED,
         )
 
         compose.setContent {
@@ -78,17 +75,15 @@ class RealtimeMapScreenTest {
             }
         }
 
-        compose.onNodeWithText("위치 정보가 지연되고 있습니다").assertIsDisplayed()
+        compose.onNodeWithText("초정밀 위치 연결이 지연되고 있습니다").assertIsDisplayed()
     }
 
     @Test
     fun successfulEmptyStateShowsNoOperatingVehicles() {
         val emptyState = normalState.copy(
-            vehicleBatch = VehicleBatch.from(
-                emptyList(),
-                Instant.parse("2026-07-17T12:00:00Z"),
-            ),
+            totalOperatingCount = 0,
             visibleVehicles = emptyList(),
+            hiddenVehicleCount = 0,
         )
 
         compose.setContent {
@@ -103,8 +98,8 @@ class RealtimeMapScreenTest {
     @Test
     fun delayedStateShowsTheAgeOfTheLastConfirmedPosition() {
         val delayedState = normalState.copy(
-            freshness = DataFreshness.DELAYED,
-            dataAgeSeconds = 22,
+            visibleVehicles = listOf(normalState.visibleVehicles.single().copy(ageSeconds = 22, delayed = true)),
+            preciseSourceHealth = PreciseSourceHealth.PARTIAL,
         )
 
         compose.setContent {
@@ -113,6 +108,6 @@ class RealtimeMapScreenTest {
             }
         }
 
-        compose.onNodeWithText("지연 · 22초 전").assertIsDisplayed()
+        compose.onNodeWithText("GPS 지연 · 22초 전").assertIsDisplayed()
     }
 }

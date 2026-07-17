@@ -19,15 +19,17 @@ class NaverMapOverlayContractTest {
     )
 
     @Test
-    fun vehicleMarkersUseRenderedFlatHeadingAwareIconsWithoutSnappingCoordinates() {
+    fun vehicleMarkersUseOnlySourceHeadingAndConfirmedCoordinates() {
         assertTrue(renderer.isFile)
         assertTrue(renderer.readText().contains("OverlayImage.fromBitmap"))
-        assertTrue(controller.contains("marker.angle ="))
+        assertTrue(controller.contains("vehicle.headingDegrees"))
+        assertTrue(controller.contains("marker.alpha = if (vehicle.delayed)"))
         assertTrue(controller.contains("marker.isFlat = true"))
         assertTrue(controller.contains("marker.anchor = PointF(0.5f, 0.5f)"))
         assertTrue(controller.contains("marker.position = vehicle.point.toLatLng()"))
         assertFalse(controller.contains("projectVehicle"))
         assertFalse(controller.contains("snapVehicle"))
+        assertFalse(controller.contains("VehicleHeadingResolver"))
     }
 
     @Test
@@ -40,12 +42,29 @@ class NaverMapOverlayContractTest {
     }
 
     @Test
-    fun stalePolicyStillRemovesEveryVehicleBeforeOverlayRendering() {
+    fun perVehicleStalePolicyRemovesPositionsBeforeOverlayRendering() {
         val viewModel = File(
             sourceRoot,
             "src/main/kotlin/com/rafaam11/businfo/ui/RealtimeMapViewModel.kt",
         ).readText()
-        assertTrue(Regex("if \\(freshness == DataFreshness\\.STALE\\) \\{\\s+emptyList\\(\\)").containsMatchIn(viewModel))
+        val uiState = File(
+            sourceRoot,
+            "src/main/kotlin/com/rafaam11/businfo/ui/RealtimeMapUiState.kt",
+        ).readText()
+        assertTrue(uiState.contains("PrecisePositionFreshness.HIDDEN"))
+        assertTrue(viewModel.contains("publishPreciseVisibility"))
         assertTrue(controller.contains("ensureVehicleMarkerCount(state.visibleVehicles.size)"))
+    }
+
+    @Test
+    fun sheetSeparatesOperatingAndPreciseCountsWithoutSignalClaims() {
+        val screen = File(
+            sourceRoot,
+            "src/main/kotlin/com/rafaam11/businfo/ui/RealtimeMapScreen.kt",
+        ).readText()
+        assertTrue(screen.contains("전체 운행"))
+        assertTrue(screen.contains("초정밀 위치"))
+        assertFalse(screen.contains("신호등"))
+        assertFalse(screen.contains("신호 정보"))
     }
 }

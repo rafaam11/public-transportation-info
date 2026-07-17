@@ -2,15 +2,20 @@ package com.rafaam11.businfo.ui
 
 import com.rafaam11.businfo.data.DashboardDataSource
 import com.rafaam11.businfo.data.DirectionOption
+import com.rafaam11.businfo.data.PreciseDataResult
+import com.rafaam11.businfo.data.PreciseRosterSnapshot
+import com.rafaam11.businfo.data.PreciseVehiclePositionDataSource
 import com.rafaam11.businfo.data.RouteGeometryDataSource
 import com.rafaam11.businfo.data.RouteMapLoadResult
 import com.rafaam11.businfo.data.VehiclePositionDataSource
 import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.CommuteSlot
-import com.rafaam11.businfo.domain.DataFreshness
 import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.GeoPoint
+import com.rafaam11.businfo.domain.PreciseSourceHealth
+import com.rafaam11.businfo.domain.PreciseVehicleBatch
+import com.rafaam11.businfo.domain.PreciseVehiclePosition
 import com.rafaam11.businfo.domain.RouteGeometry
 import com.rafaam11.businfo.domain.RouteSegment
 import com.rafaam11.businfo.domain.RouteStop
@@ -31,6 +36,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,23 +51,117 @@ class RealtimeMapViewModelTest {
         RouteStop("route", "target", "효동초등학교건너", "0", 8, 128.64, 35.84),
     )
 
-    @Test fun `opening visible map polls immediately then after eight seconds`() = runTest {
+    @Test fun `visible map polls precise positions every three seconds and summaries every fifteen`() = runTest {
         val fixture = fixture(testScheduler)
         fixture.viewModel.setVisible(true)
         fixture.viewModel.open(CommuteSlot.MORNING)
         runCurrent()
-        assertEquals(1, fixture.vehicles.calls)
 
-        advanceTimeBy(7_999)
+        assertEquals(1, fixture.summary.calls)
+        assertEquals(1, fixture.precise.rosterCalls)
+        assertEquals(1, fixture.precise.positionCalls)
+
+        advanceTimeBy(3_000)
         runCurrent()
-        assertEquals(1, fixture.vehicles.calls)
-        advanceTimeBy(1)
+        assertEquals(2, fixture.precise.positionCalls)
+        assertEquals(1, fixture.summary.calls)
+        assertEquals(1, fixture.precise.rosterCalls)
+
+        advanceTimeBy(12_000)
         runCurrent()
-        assertEquals(2, fixture.vehicles.calls)
+        assertEquals(2, fixture.summary.calls)
+        assertEquals(2, fixture.precise.rosterCalls)
         fixture.viewModel.close()
     }
 
-    @Test fun `background visibility cancels polling`() = runTest {
+    @Test fun `public stop coordinates are never mapped and precise vehicle hides after thirty seconds`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+
+        val first = fixture.viewModel.uiState.value
+        assertEquals(128.615, first.visibleVehicles.single().point.longitude, 0.000001)
+        assertFalse(first.visibleVehicles.any { it.point.longitude == 128.61 })
+
+        fixture.precise.positionResults += PreciseDataResult.Failure(BusDataError.NetworkUnavailable)
+        fixture.clock.advanceSeconds(31)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertTrue(fixture.viewModel.uiState.value.visibleVehicles.isEmpty())
+        assertEquals(1, fixture.viewModel.uiState.value.hiddenVehicleCount)
+        fixture.viewModel.close()
+    }
+
+    @Test fun `partial detail failure retains last confirmed vehicle independently`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.precise.defaultPositions = preciseBatch(
+            positions = listOf(precise("one", start), precise("two", start).copy(point = GeoPoint(128.62, 35.82))),
+            rosterCount = 2,
+        )
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+        assertEquals(2, fixture.viewModel.uiState.value.visibleVehicles.size)
+
+        fixture.precise.positionResults += PreciseDataResult.Success(
+            preciseBatch(
+                listOf(precise("one", start.plusSeconds(3))),
+                rosterCount = 2,
+                failureCount = 1,
+                rosterSessionKeys = setOf("one", "two"),
+            ),
+        )
+        fixture.clock.advanceSeconds(3)
+        advanceTimeBy(3_000)
+        runCurrent()
+
+        assertEquals(2, fixture.viewModel.uiState.value.visibleVehicles.size)
+        assertEquals(PreciseSourceHealth.PARTIAL, fixture.viewModel.uiState.value.preciseSourceHealth)
+        fixture.viewModel.close()
+    }
+
+    @Test fun `vehicle removed from current roster is removed without waiting for GPS expiry`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.precise.defaultPositions = preciseBatch(
+            positions = listOf(precise("one", start), precise("two", start)),
+            rosterCount = 2,
+        )
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+        assertEquals(2, fixture.viewModel.uiState.value.visibleVehicles.size)
+
+        fixture.precise.positionResults += PreciseDataResult.Success(
+            preciseBatch(
+                positions = listOf(precise("one", start.plusSeconds(3))),
+                rosterCount = 1,
+                rosterSessionKeys = setOf("one"),
+            ),
+        )
+        fixture.clock.advanceSeconds(3)
+        advanceTimeBy(3_000)
+        runCurrent()
+
+        assertEquals(listOf("one"), fixture.viewModel.uiState.value.visibleVehicles.map(MapVehicleUi::key))
+        fixture.viewModel.close()
+    }
+
+    @Test fun `source heading and per vehicle age are mapped without geometry inference`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+
+        val vehicle = fixture.viewModel.uiState.value.visibleVehicles.single()
+        assertEquals(90f, vehicle.headingDegrees)
+        assertEquals(0L, vehicle.ageSeconds)
+        assertFalse(vehicle.delayed)
+        fixture.viewModel.close()
+    }
+
+    @Test fun `background cancels all polling and close clears precise session`() = runTest {
         val fixture = fixture(testScheduler)
         fixture.viewModel.setVisible(true)
         fixture.viewModel.open(CommuteSlot.MORNING)
@@ -70,143 +170,55 @@ class RealtimeMapViewModelTest {
 
         advanceTimeBy(60_000)
         runCurrent()
+        assertEquals(1, fixture.summary.calls)
+        assertEquals(1, fixture.precise.rosterCalls)
+        assertEquals(1, fixture.precise.positionCalls)
 
-        assertEquals(1, fixture.vehicles.calls)
         fixture.viewModel.close()
+        assertEquals(1, fixture.precise.closeCalls)
     }
 
-    @Test fun `freshness ticker hides vehicles after thirty seconds`() = runTest {
+    @Test fun `all detail failures back off from six to fifteen seconds`() = runTest {
         val fixture = fixture(testScheduler)
+        repeat(3) { fixture.precise.positionResults += PreciseDataResult.Failure(BusDataError.NetworkUnavailable) }
         fixture.viewModel.setVisible(true)
         fixture.viewModel.open(CommuteSlot.MORNING)
         runCurrent()
-        assertEquals(1, fixture.viewModel.uiState.value.visibleVehicles.size)
+        assertEquals(1, fixture.precise.positionCalls)
 
-        fixture.clock.advanceSeconds(31)
-        advanceTimeBy(1_000)
+        advanceTimeBy(5_999)
         runCurrent()
+        assertEquals(1, fixture.precise.positionCalls)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, fixture.precise.positionCalls)
 
-        assertTrue(fixture.viewModel.uiState.value.visibleVehicles.isEmpty())
-        assertEquals(DataFreshness.STALE, fixture.viewModel.uiState.value.freshness)
+        advanceTimeBy(14_999)
+        runCurrent()
+        assertEquals(2, fixture.precise.positionCalls)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(3, fixture.precise.positionCalls)
         fixture.viewModel.close()
     }
 
-    @Test fun `freshness ticker exposes delayed data age while keeping confirmed vehicles`() = runTest {
-        val fixture = fixture(testScheduler)
-        fixture.viewModel.setVisible(true)
-        fixture.viewModel.open(CommuteSlot.MORNING)
-        runCurrent()
-
-        fixture.clock.advanceSeconds(16)
-        advanceTimeBy(1_000)
-        runCurrent()
-
-        assertEquals(DataFreshness.DELAYED, fixture.viewModel.uiState.value.freshness)
-        assertEquals(16L, fixture.viewModel.uiState.value.dataAgeSeconds)
-        assertEquals(1, fixture.viewModel.uiState.value.visibleVehicles.size)
-        fixture.viewModel.close()
-    }
-
-    @Test fun `authentication failure stops future polls`() = runTest {
-        val fixture = fixture(testScheduler, mutableListOf(VehicleLoadResult.Failure(BusDataError.InvalidCredential, null)))
-        fixture.viewModel.setVisible(true)
-        fixture.viewModel.open(CommuteSlot.MORNING)
-        runCurrent()
-
-        advanceTimeBy(120_000)
-        runCurrent()
-
-        assertEquals(1, fixture.vehicles.calls)
-        fixture.viewModel.close()
-    }
-
-    @Test fun `quota failure remains stopped after background and resumes only on retry`() = runTest {
-        val fixture = fixture(
-            testScheduler,
-            mutableListOf(VehicleLoadResult.Failure(BusDataError.RateLimited, null)),
-        )
-        fixture.viewModel.setVisible(true)
-        fixture.viewModel.open(CommuteSlot.MORNING)
-        runCurrent()
-        assertEquals(1, fixture.vehicles.calls)
-
-        fixture.viewModel.setVisible(false)
-        fixture.viewModel.setVisible(true)
-        advanceTimeBy(120_000)
-        runCurrent()
-        assertEquals(1, fixture.vehicles.calls)
-
-        fixture.viewModel.retry()
-        runCurrent()
-        assertEquals(2, fixture.vehicles.calls)
-        fixture.viewModel.close()
-    }
-
-    @Test fun `terminal service errors remain stopped when switching commute slots`() = runTest {
-        listOf(BusDataError.InvalidCredential, BusDataError.RateLimited).forEach { error ->
-            val fixture = fixture(
-                testScheduler,
-                mutableListOf(VehicleLoadResult.Failure(error, null)),
-            )
-            fixture.viewModel.setVisible(true)
-            fixture.viewModel.open(CommuteSlot.MORNING)
-            runCurrent()
-            assertEquals(1, fixture.vehicles.calls)
-
-            fixture.viewModel.close()
-            fixture.viewModel.setVisible(true)
-            fixture.viewModel.open(CommuteSlot.EVENING)
-            runCurrent()
-
-            assertEquals(1, fixture.vehicles.calls)
-            assertEquals(error, fixture.viewModel.uiState.value.vehicleError)
-            fixture.viewModel.close()
-        }
-    }
-
-    @Test fun `map authentication error remains blocking when the destination opens`() = runTest {
-        val fixture = fixture(testScheduler)
-        fixture.mapAuthMonitor.report("401")
-        runCurrent()
-
-        fixture.viewModel.setVisible(true)
-        fixture.viewModel.open(CommuteSlot.MORNING)
-        runCurrent()
-
-        assertEquals("401", fixture.viewModel.uiState.value.mapErrorCode)
-        assertEquals(0, fixture.vehicles.calls)
-        fixture.viewModel.close()
-    }
-
-    @Test fun `vehicle mapper derives remaining stops without a persistent identifier`() {
-        val batch = VehicleBatch.from(listOf(vehicle(start)), start)
-
-        val result = mapVehicles(selection, stops, batch).single()
-
-        assertEquals(3, result.remainingStops)
-        assertEquals("동대구역", result.stopName)
-        assertTrue(result.key.startsWith(start.toEpochMilli().toString()))
-    }
-
-    private fun fixture(
-        scheduler: TestCoroutineScheduler,
-        results: MutableList<VehicleLoadResult> = mutableListOf(),
-    ): Fixture {
+    private fun fixture(scheduler: TestCoroutineScheduler): Fixture {
         val clock = MutableClock(start)
-        val vehicles = FakeVehicles(clock, results)
-        val mapAuthMonitor = MapAuthMonitor()
+        val summary = FakeSummary(clock)
+        val precise = FakePrecise(clock)
         return Fixture(
             RealtimeMapViewModel(
                 FakeDashboard(selection),
                 FakeGeometry(geometry(), stops),
-                vehicles,
-                mapAuthMonitor,
+                summary,
+                precise,
+                MapAuthMonitor(),
                 clock,
                 StandardTestDispatcher(scheduler),
             ),
-            vehicles,
+            summary,
+            precise,
             clock,
-            mapAuthMonitor,
         )
     }
 
@@ -214,21 +226,51 @@ class RealtimeMapViewModelTest {
         "route", "0", listOf(RouteSegment(listOf("a", "b"), listOf(GeoPoint(128.60, 35.80), GeoPoint(128.65, 35.85)))), start,
     )
 
-    private fun vehicle(fetchedAt: Instant) = VehicleSnapshot(
-        "route", "급행8-1", "0", "nearby", 5, 35.81, 128.61, fetchedAt.toString(), null, null,
+    private fun summaryVehicle(time: Instant) = VehicleSnapshot(
+        "route", "급행8-1", "0", "nearby", 5, 35.81, 128.61, time.toString(), null, null,
     )
 
-    private inner class FakeVehicles(
-        private val clock: Clock,
-        val results: MutableList<VehicleLoadResult>,
-    ) : VehiclePositionDataSource {
+    private fun precise(key: String, observedAt: Instant) = PreciseVehiclePosition(
+        key, "route", "0", "nearby", 5, GeoPoint(128.615, 35.815), observedAt, 90f, "곧 도착",
+    )
+
+    private fun preciseBatch(
+        positions: List<PreciseVehiclePosition>,
+        rosterCount: Int,
+        failureCount: Int = 0,
+        rosterSessionKeys: Set<String> = positions.map(PreciseVehiclePosition::sessionKey).toSet(),
+    ) = PreciseVehicleBatch(positions, rosterCount, failureCount, start, rosterSessionKeys)
+
+    private inner class FakeSummary(private val clock: Clock) : VehiclePositionDataSource {
         var calls = 0
         override suspend fun refresh(selection: FavoriteSelection): VehicleLoadResult {
             calls++
-            return if (results.isNotEmpty()) results.removeAt(0) else {
-                VehicleLoadResult.Success(VehicleBatch.from(listOf(vehicle(clock.instant())), clock.instant()))
+            return VehicleLoadResult.Success(VehicleBatch.from(listOf(summaryVehicle(clock.instant())), clock.instant()))
+        }
+    }
+
+    private inner class FakePrecise(private val clock: Clock) : PreciseVehiclePositionDataSource {
+        var rosterCalls = 0
+        var positionCalls = 0
+        var closeCalls = 0
+        var defaultPositions = preciseBatch(listOf(precise("one", start)), 1)
+        val positionResults = ArrayDeque<PreciseDataResult<PreciseVehicleBatch>>()
+
+        override suspend fun refreshRoster(selection: FavoriteSelection): PreciseDataResult<PreciseRosterSnapshot> {
+            rosterCalls++
+            return PreciseDataResult.Success(PreciseRosterSnapshot(defaultPositions.rosterCount, clock.instant()))
+        }
+
+        override suspend fun refreshPositions(selection: FavoriteSelection): PreciseDataResult<PreciseVehicleBatch> {
+            positionCalls++
+            return if (positionResults.isEmpty()) {
+                PreciseDataResult.Success(defaultPositions.copy(receivedAt = clock.instant()))
+            } else {
+                positionResults.removeFirst()
             }
         }
+
+        override fun closeSession() { closeCalls++ }
     }
 
     private class FakeGeometry(
@@ -263,8 +305,8 @@ class RealtimeMapViewModelTest {
 
     private data class Fixture(
         val viewModel: RealtimeMapViewModel,
-        val vehicles: FakeVehicles,
+        val summary: FakeSummary,
+        val precise: FakePrecise,
         val clock: MutableClock,
-        val mapAuthMonitor: MapAuthMonitor,
     )
 }

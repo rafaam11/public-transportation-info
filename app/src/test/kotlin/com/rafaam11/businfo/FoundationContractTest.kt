@@ -3,6 +3,8 @@ package com.rafaam11.businfo
 import com.rafaam11.businfo.ui.map.RoutePalette
 import com.rafaam11.businfo.ui.map.RoutePaletteResolver
 import java.io.File
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,14 +14,38 @@ import org.w3c.dom.Element
 
 class FoundationContractTest {
     @Test
-    fun releaseVersionIs040() {
+    fun releaseVersionIs050() {
         val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
         }
         val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
 
-        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*4\\s*$").containsMatchIn(appBuild))
-        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.4\\.0\"\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*5\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.5\\.0\"\\s*$").containsMatchIn(appBuild))
+    }
+
+    @Test
+    fun accubusUsesDomainScopedMissingIntermediateOnly() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val manifest = File(repoRoot, "app/src/main/AndroidManifest.xml").readText()
+        val config = File(repoRoot, "app/src/main/res/xml/network_security_config.xml").readText()
+        val certificateFile = File(
+            repoRoot,
+            "app/src/main/res/raw/globalsign_gcc_r3_dv_tls_ca_2020.pem",
+        )
+        val certificate = certificateFile.inputStream().use { stream ->
+            CertificateFactory.getInstance("X.509").generateCertificate(stream) as X509Certificate
+        }
+
+        assertTrue(manifest.contains("android:networkSecurityConfig=\"@xml/network_security_config\""))
+        assertTrue(config.contains("<domain includeSubdomains=\"false\">accubus.daegu.go.kr</domain>"))
+        assertTrue(config.contains("<certificates src=\"system\""))
+        assertTrue(config.contains("@raw/globalsign_gcc_r3_dv_tls_ca_2020"))
+        assertFalse(config.contains("includeSubdomains=\"true\""))
+        assertTrue(certificate.subjectX500Principal.name.contains("CN=GlobalSign GCC R3 DV TLS CA 2020"))
+        assertTrue(certificate.basicConstraints >= 0)
     }
 
     @Test

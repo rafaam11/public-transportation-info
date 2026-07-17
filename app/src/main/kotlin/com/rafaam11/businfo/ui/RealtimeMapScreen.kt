@@ -32,7 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.rafaam11.businfo.domain.DataFreshness
+import com.rafaam11.businfo.domain.PreciseSourceHealth
 
 const val REALTIME_MAP_SURFACE_TAG = "realtime_map_surface"
 const val REALTIME_MAP_SHEET_TAG = "realtime_map_sheet"
@@ -113,13 +113,10 @@ private fun RealtimeMapSheet(
     onVehicleSelected: (String) -> Unit,
 ) {
     val selection = state.selection
-    val statusText = when {
-        state.vehicleBatch?.vehicles?.isEmpty() == true && state.vehicleError == null -> {
-            "현재 운행 차량 없음"
-        }
-        state.freshness == DataFreshness.STALE -> "위치 정보가 지연되고 있습니다"
-        state.vehicleError != null -> state.vehicleError.userMessage()
-        else -> "운행 차량 ${state.visibleVehicles.size}대"
+    val statusText = if (state.totalOperatingCount == 0 && state.vehicleError == null) {
+        "현재 운행 차량 없음"
+    } else {
+        "전체 운행 ${state.totalOperatingCount?.toString() ?: "-"}대 · 초정밀 위치 ${state.visibleVehicles.size}대"
     }
     Column(
         Modifier
@@ -136,14 +133,17 @@ private fun RealtimeMapSheet(
         )
         selection?.let { Text("내 정류장 · ${it.stopName}") }
         Text(statusText)
-        state.dataAgeSeconds?.let { ageSeconds ->
-            val freshnessLabel = when (state.freshness) {
-                DataFreshness.FRESH -> "정상"
-                DataFreshness.DELAYED -> "지연"
-                DataFreshness.STALE -> "오래됨"
-                DataFreshness.UNAVAILABLE -> "수신 전"
-            }
-            Text("$freshnessLabel · ${ageSeconds}초 전")
+        if (
+            state.totalOperatingCount != 0 &&
+            state.preciseSourceHealth in setOf(PreciseSourceHealth.DELAYED, PreciseSourceHealth.UNAVAILABLE)
+        ) {
+            Text(
+                "초정밀 위치 연결이 지연되고 있습니다",
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (state.hiddenVehicleCount > 0) {
+            Text("초정밀 위치 미표시 ${state.hiddenVehicleCount}대")
         }
         if (state.geometry != null && state.geometryError != null) {
             Text(
@@ -171,10 +171,17 @@ private fun RealtimeMapSheet(
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
                     Text(vehicle.stopName, fontWeight = FontWeight.SemiBold)
                     Text(remaining)
+                    Text(
+                        if (vehicle.delayed) {
+                            "GPS 지연 · ${vehicle.ageSeconds}초 전"
+                        } else {
+                            "GPS ${vehicle.ageSeconds}초 전"
+                        },
+                    )
                 }
             }
         }
-        if (state.vehicleError != null || state.geometryError != null) {
+        if (state.preciseError != null || state.vehicleError != null || state.geometryError != null) {
             OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
                 Text("다시 시도")
             }

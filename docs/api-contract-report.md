@@ -46,12 +46,21 @@
 
 ## getPos02 위치 정밀도 판정
 
-판정: `GPS_COORDINATES`.
+최신 판정(2026-07-17): `STOP_ANCHORED_COORDINATES`.
 
 - `xPos`와 `yPos`가 차량 레코드마다 실수형 숫자로 존재한다.
 - 814번 23개 차량의 관측 범위는 `xPos=128.623136283333..128.8493`, `yPos=35.81502..35.9128`이었다.
 - `bsId`, `seq`, `moveDir`도 함께 제공되어 좌표와 노선 진행 상태를 연결할 수 있다.
-- 따라서 지도 마커는 `getPos02.xPos/yPos`를 확인 좌표로 사용한다. 링크·정류장 순서만으로 위치를 보간하는 대체 경로는 기본 동작에 필요하지 않다.
+- 그러나 급행8-1 재검증에서는 6대 중 5대의 좌표가 연결된 정류소 좌표와 정확히 같았고,
+  나머지 1대도 약 8.6m 차이였다. 숫자형 좌표가 존재한다는 사실만으로 주행 중 GPS라고 판정할 수 없다.
+- 따라서 `getPos02.xPos/yPos`는 전체 운행 대수와 최근 정류소 문맥에만 사용하며 지도 차량
+  마커에는 사용하지 않는다.
+- 지도 마커는 대구시 공개 초정밀 웹 화면의 Accubus 상세 응답 `body.xPos/yPos`만 사용한다.
+  이 경로는 공개 API 계약이나 SLA가 없으므로 차량별 오류 격리와 30초 만료가 필수다.
+- Accubus의 `crfId`, 차량번호, `posNo` 커서는 메모리에만 두고 저장·표시·로그하지 않는다.
+- 2026-07-17 실기기 검증에서 서버가 leaf 발급 중간 인증서 대신 관련 없는 인증서를 TLS
+  체인에 제공해 Android 연결이 실패했다. leaf AIA의 공식 GlobalSign 중간 인증서를
+  `accubus.daegu.go.kr` 단일 도메인에만 추가하자 같은 기기에서 초정밀 위치가 정상 수신됐다.
 - API가 다음 좌표를 제공하기 전에는 임의로 미래 위치를 외삽하지 않는다.
 
 ## 오류 및 빈 응답 동작
@@ -59,14 +68,16 @@
 - 잘못된 parameter 이름 `stdt`를 사용하면 HTTP 상태는 200이지만 JSON header는 `resultCode=9003`, `resultMsg=인증키오류 및 파라미터 오류`, `success=false`다.
 - 클라이언트는 HTTP 상태만으로 성공을 판단하면 안 되며 `header.resultCode`와 `header.success`를 함께 확인해야 한다.
 - 운행 시간대의 814번 검증에서는 `getPos02` 23개와 `getRealtime02` 1개 노선 항목이 반환되어 빈 응답 동작은 관측되지 않았다.
-- 이후 단일 호출에서 빈 `items`가 반환되면 기존 정상 스냅샷을 유지하고 네트워크 실패로 오인하지 않으며, 데이터 신선도를 별도로 표시한다. 단일 빈 응답만으로 이 계약의 `GPS_COORDINATES` 판정을 바꾸지 않는다. 최초 계약 검증에서 운행 시간대 재시도 후에도 차량 항목이 없을 때만 runbook 기준의 `INSUFFICIENT_DATA`로 판정한다.
+- 이후 단일 호출에서 빈 `items`가 반환되면 기존 정상 스냅샷을 유지하고 네트워크 실패로 오인하지 않으며, 데이터 신선도를 별도로 표시한다. 최초 계약 검증에서 운행 시간대 재시도 후에도 차량 항목이 없을 때만 runbook 기준의 `INSUFFICIENT_DATA`로 판정한다.
 
 ## 후속 DTO 설계 입력값
 
 - 공통 envelope: `header(resultCode, resultMsg, success)`와 `body(totalCount, items)`.
 - 노선: `routeId`, `routeNo`, 방향·기종점·노선 설명 필드.
 - 정류소: `bsId`, `bsNm`, `xPos`, `yPos`, `moveDir`, `seq`.
-- 차량 위치: `routeId`, `routeNo`, `bsId`, `seq`, `moveDir`, `xPos`, `yPos`, `arTime`, 버스 유형 코드. `vhcNo2`는 민감 필드로 별도 취급한다.
+- 공개 차량 요약: `routeId`, `routeNo`, `bsId`, `seq`, `moveDir`, `xPos`, `yPos`, `arTime`, 버스 유형 코드. `vhcNo2`는 민감 필드로 별도 취급한다.
+- 초정밀 차량 위치: 앱 경계 밖으로는 임의 세션 키, `routeId`, `moveDir`, `bsId`, `seq`,
+  `xPos`, `yPos`, `gpsTm`, `heading`만 전달한다.
 - 도착정보: 요청은 `bsId + routeNo`; 응답은 `arrState`, `arrTime`, `bsGap`, `prevBsGap`, `moveDir`, 노선·버스 유형 필드.
 - 노선 형상: `linkId`, `stNode`, `edNode`, `gisDist`, `moveDir`, `linkSeq`; 기초 데이터의 node/link 좌표와 결합한다.
 - 실제 JSON에서 `items`는 복수일 때 배열로 관측됐다. 후속 DTO fixture는 배열 응답과 빈 응답을 모두 포함해야 한다.
