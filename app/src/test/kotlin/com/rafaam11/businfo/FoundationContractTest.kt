@@ -17,7 +17,7 @@ class FoundationContractTest {
         val sourceRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "src/main").isDirectory) cwd else File(cwd, "app")
         }
-        val screen = File(sourceRoot, "src/main/kotlin/com/rafaam11/businfo/ui/VehicleListScreen.kt").readText()
+        val screen = File(sourceRoot, "src/main/kotlin/com/rafaam11/businfo/ui/DashboardScreens.kt").readText()
         val manifest = File(sourceRoot, "src/main/AndroidManifest.xml").readText()
         val legacyRules = File(sourceRoot, "src/main/res/xml/backup_rules.xml").takeIf(File::isFile)?.readText().orEmpty()
         val extractionRules = File(sourceRoot, "src/main/res/xml/data_extraction_rules.xml").takeIf(File::isFile)?.readText().orEmpty()

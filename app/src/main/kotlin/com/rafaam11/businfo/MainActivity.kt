@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.rafaam11.businfo.ui.VehicleListViewModel
+import com.rafaam11.businfo.ui.BusAppViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,11 +16,11 @@ class MainActivity : ComponentActivity() {
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    require(modelClass.isAssignableFrom(VehicleListViewModel::class.java))
-                    return VehicleListViewModel(graph.repository) as T
+                    require(modelClass.isAssignableFrom(BusAppViewModel::class.java))
+                    return BusAppViewModel(graph.credentialRepository, graph.dashboardRepository) as T
                 }
             },
-        )[VehicleListViewModel::class.java]
+        )[BusAppViewModel::class.java]
 
         setContent { BusInfoApp(viewModel) }
     }

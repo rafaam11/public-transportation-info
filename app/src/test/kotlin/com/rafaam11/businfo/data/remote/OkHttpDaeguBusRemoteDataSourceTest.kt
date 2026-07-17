@@ -81,6 +81,50 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals(RemoteResult.Success(emptyList<Any>()), source.vehicles("secret", "3000814001"))
     }
 
+    @Test fun basicResponseMapsRoutesAndUsesBasicEndpoint() = runTest {
+        server.enqueue(MockResponse().setBody(ROUTES_SUCCESS))
+
+        val result = source.routes("secret")
+
+        assertTrue(result is RemoteResult.Success)
+        val route = (result as RemoteResult.Success).value.single()
+        assertEquals("3000814001", route.routeId)
+        assertEquals("814", route.routeNo)
+        assertEquals("대구대학교", route.startName)
+        assertEquals("범물동", route.endName)
+        assertEquals("범물동 방면", route.directionNote)
+        assertEquals("대구대 방면", route.reverseDirectionNote)
+        assertEquals("/getBasic02", server.takeRequest().requestUrl!!.encodedPath)
+    }
+
+    @Test fun routeStopsMapStringSequencesAndDirection() = runTest {
+        server.enqueue(MockResponse().setBody(STOPS_SUCCESS))
+
+        val result = source.routeStops("secret", "3000814001")
+
+        assertTrue(result is RemoteResult.Success)
+        val stop = (result as RemoteResult.Success).value.single()
+        assertEquals("stop-a", stop.stopId)
+        assertEquals("효동초등학교건너", stop.stopName)
+        assertEquals("0", stop.moveDirection)
+        assertEquals(12, stop.sequence)
+        assertEquals("3000814001", server.takeRequest().requestUrl!!.queryParameter("routeId"))
+    }
+
+    @Test fun realtimeResponseFiltersRequestedRouteAndSortsByArrivalTime() = runTest {
+        server.enqueue(MockResponse().setBody(ARRIVALS_SUCCESS))
+
+        val result = source.arrivals("secret", "stop-a", "814")
+
+        assertTrue(result is RemoteResult.Success)
+        val arrivals = (result as RemoteResult.Success).value
+        assertEquals(listOf(61, 487), arrivals.map { it.arrivalSeconds })
+        assertEquals(listOf(2, 7), arrivals.map { it.stopGap })
+        val url = server.takeRequest().requestUrl!!
+        assertEquals("stop-a", url.queryParameter("bsId"))
+        assertEquals("814", url.queryParameter("routeNo"))
+    }
+
     @Test fun partiallyValidVehicleItemsDiscardOnlyInvalidRows() = runTest {
         server.enqueue(MockResponse().setBody(successEnvelope("[$VALID_VEHICLE,{\"routeId\":\"\"}]")))
 
@@ -226,6 +270,24 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         const val EMPTY_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":0,"items":[]}}
+        """
+        const val ROUTES_SUCCESS = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":1,"items":{"route":[{"routeId":"3000814001","routeNo":"814",
+             "stNm":"대구대학교","edNm":"범물동","dirRouteNote":"범물동 방면","ndirRouteNote":"대구대 방면"}],
+             "bs":[],"node":[],"link":[]}}}
+        """
+        const val STOPS_SUCCESS = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":1,"items":[{"bsId":"stop-a","bsNm":"효동초등학교건너",
+             "xPos":"128.6","yPos":"35.8","moveDir":"0","seq":"12"}]}}
+        """
+        const val ARRIVALS_SUCCESS = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":1,"items":[{"routeNo":"814","arrList":[
+             {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":7,"arrTime":487,"arrState":"9분"},
+             {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":2,"arrTime":61,"arrState":""},
+             {"routeId":"other","routeNo":"999","moveDir":"0","bsGap":1,"arrTime":30,"arrState":"곧 도착"}]}]}}
         """
         const val FAILURE_HEADER = """
             {"header":{"resultCode":"9003","resultMsg":"error","success":false},
