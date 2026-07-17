@@ -32,4 +32,23 @@ class BusDatabaseMigrationTest {
             }
         }
     }
+
+    @Test fun migration2To3PreservesFavoriteAndAddsNullableRouteTypes() {
+        helper.createDatabase("migration-2-3", 2).apply {
+            execSQL(
+                "INSERT INTO favorites VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arrayOf("MORNING", "route", "급행8-1", "0", "유곡리 방면", "stop", "진천역"),
+            )
+            close()
+        }
+        helper.runMigrationsAndValidate("migration-2-3", 3, true, MIGRATION_2_3).use { db ->
+            db.query("SELECT routeTypeCode FROM routes").use { cursor ->
+                assertEquals("routeTypeCode", cursor.getColumnName(0))
+            }
+            db.query("SELECT routeTypeCode FROM favorites WHERE slot='MORNING'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+            }
+        }
+    }
 }

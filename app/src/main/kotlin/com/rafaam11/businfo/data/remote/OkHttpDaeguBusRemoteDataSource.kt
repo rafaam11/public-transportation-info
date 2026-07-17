@@ -158,6 +158,7 @@ class OkHttpDaeguBusRemoteDataSource(
                 endName = item.string("edNm").orEmpty(),
                 directionNote = item.string("dirRouteNote"),
                 reverseDirectionNote = item.string("ndirRouteNote"),
+                routeTypeCode = item.string("routeTCd")?.takeIf(String::isNotBlank),
             )
         }
         return if (routeArray.size() > 0 && routes.isEmpty()) {

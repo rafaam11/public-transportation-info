@@ -9,6 +9,7 @@ import com.rafaam11.businfo.data.VehiclePositionRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
 import com.rafaam11.businfo.data.local.MIGRATION_1_2
+import com.rafaam11.businfo.data.local.MIGRATION_2_3
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import com.rafaam11.businfo.ui.map.MapAuthMonitor
@@ -26,7 +27,7 @@ class AppGraph private constructor(context: Context) {
     )
 
     private val database = Room.databaseBuilder(context.applicationContext, BusDatabase::class.java, "bus-info.db")
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
     private val local = RoomBusLocalDataSource(database.dao())
 

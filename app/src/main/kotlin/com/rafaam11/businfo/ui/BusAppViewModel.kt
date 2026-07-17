@@ -130,9 +130,18 @@ class BusAppViewModel(
         val route = state.selectedRoute ?: return
         val direction = state.selectedDirection ?: return
         viewModelScope.launch(dispatcher) {
-            dashboard.saveFavorite(FavoriteSelection(
-                state.slot, route.routeId, route.routeNo, direction.code, direction.label, stop.stopId, stop.stopName,
-            ))
+            dashboard.saveFavorite(
+                FavoriteSelection(
+                    slot = state.slot,
+                    routeId = route.routeId,
+                    routeNo = route.routeNo,
+                    directionCode = direction.code,
+                    directionLabel = direction.label,
+                    stopId = stop.stopId,
+                    stopName = stop.stopName,
+                    routeTypeCode = route.routeTypeCode,
+                ),
+            )
             val error = dashboard.refreshFavorite(state.slot)
             errors = if (error == null) errors - state.slot else errors + (state.slot to error.userMessage())
             publishCards()

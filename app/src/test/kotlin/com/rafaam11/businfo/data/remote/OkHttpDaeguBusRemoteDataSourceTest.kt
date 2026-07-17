@@ -96,6 +96,7 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals("범물동", route.endName)
         assertEquals("범물동 방면", route.directionNote)
         assertEquals("대구대 방면", route.reverseDirectionNote)
+        assertEquals("1", route.routeTypeCode)
         assertEquals("/getBasic02", server.takeRequest().requestUrl!!.encodedPath)
     }
 
@@ -333,7 +334,7 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         const val ROUTES_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":1,"items":{"route":[{"routeId":"3000814001","routeNo":"814",
-             "stNm":"대구대학교","edNm":"범물동","dirRouteNote":"범물동 방면","ndirRouteNote":"대구대 방면"}],
+             "stNm":"대구대학교","edNm":"범물동","dirRouteNote":"범물동 방면","ndirRouteNote":"대구대 방면","routeTCd":"1"}],
              "bs":[],"node":[],"link":[]}}}
         """
         const val STOPS_SUCCESS = """

@@ -18,6 +18,7 @@ data class RouteEntity(
     val endName: String,
     val directionNote: String?,
     val reverseDirectionNote: String?,
+    val routeTypeCode: String?,
 )
 
 @Entity(tableName = "route_stops", primaryKeys = ["routeId", "moveDirection", "sequence"])
@@ -40,6 +41,7 @@ data class FavoriteEntity(
     val directionLabel: String,
     val stopId: String,
     val stopName: String,
+    val routeTypeCode: String?,
 )
 
 @Entity(tableName = "arrival_snapshots", primaryKeys = ["slot"])
@@ -64,7 +66,15 @@ abstract class BusDao {
     @Query("SELECT * FROM routes") abstract suspend fun routes(): List<RouteEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun insertRoutes(routes: List<RouteEntity>)
     @Query("DELETE FROM routes") abstract suspend fun clearRoutes()
-    @Transaction open suspend fun replaceRoutes(routes: List<RouteEntity>) { clearRoutes(); insertRoutes(routes) }
+    @Query("""UPDATE favorites
+        SET routeTypeCode = (SELECT routeTypeCode FROM routes WHERE routes.routeId = favorites.routeId)
+        WHERE routeTypeCode IS NULL""")
+    abstract suspend fun backfillFavoriteRouteTypes()
+    @Transaction open suspend fun replaceRoutes(routes: List<RouteEntity>) {
+        clearRoutes()
+        insertRoutes(routes)
+        backfillFavoriteRouteTypes()
+    }
 
     @Query("SELECT * FROM route_stops WHERE routeId = :routeId ORDER BY moveDirection, sequence")
     abstract suspend fun routeStops(routeId: String): List<RouteStopEntity>
@@ -100,7 +110,7 @@ abstract class BusDao {
 @Database(
     entities = [RouteEntity::class, RouteStopEntity::class, FavoriteEntity::class, ArrivalSnapshotEntity::class,
         VehicleSnapshotEntity::class, SyncEntity::class, RouteGeometryEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class BusDatabase : RoomDatabase() {

@@ -15,6 +15,7 @@ data class RouteSummary(
     val endName: String,
     val directionNote: String?,
     val reverseDirectionNote: String?,
+    val routeTypeCode: String? = null,
 )
 
 data class RouteStop(
@@ -35,6 +36,7 @@ data class FavoriteSelection(
     val directionLabel: String,
     val stopId: String,
     val stopName: String,
+    val routeTypeCode: String? = null,
 )
 
 data class ArrivalEstimate(

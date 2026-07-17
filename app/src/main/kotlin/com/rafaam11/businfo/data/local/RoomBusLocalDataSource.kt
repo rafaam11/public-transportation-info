@@ -71,15 +71,19 @@ class RoomBusLocalDataSource(
         ),
     )
 
-    private fun RouteEntity.toDomain() = RouteSummary(routeId, routeNo, startName, endName, directionNote, reverseDirectionNote)
-    private fun RouteSummary.toEntity() = RouteEntity(routeId, routeNo, startName, endName, directionNote, reverseDirectionNote)
+    private fun RouteEntity.toDomain() = RouteSummary(
+        routeId, routeNo, startName, endName, directionNote, reverseDirectionNote, routeTypeCode,
+    )
+    private fun RouteSummary.toEntity() = RouteEntity(
+        routeId, routeNo, startName, endName, directionNote, reverseDirectionNote, routeTypeCode,
+    )
     private fun RouteStopEntity.toDomain() = RouteStop(routeId, stopId, stopName, moveDirection, sequence, longitude, latitude)
     private fun RouteStop.toEntity() = RouteStopEntity(routeId, stopId, stopName, moveDirection, sequence, longitude, latitude)
     private fun FavoriteEntity.toDomain() = FavoriteSelection(
-        CommuteSlot.valueOf(slot), routeId, routeNo, directionCode, directionLabel, stopId, stopName,
+        CommuteSlot.valueOf(slot), routeId, routeNo, directionCode, directionLabel, stopId, stopName, routeTypeCode,
     )
     private fun FavoriteSelection.toEntity() = FavoriteEntity(
-        slot.name, routeId, routeNo, directionCode, directionLabel, stopId, stopName,
+        slot.name, routeId, routeNo, directionCode, directionLabel, stopId, stopName, routeTypeCode,
     )
 
     private companion object {
