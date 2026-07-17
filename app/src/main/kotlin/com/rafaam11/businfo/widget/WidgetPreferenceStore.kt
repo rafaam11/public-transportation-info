@@ -19,8 +19,10 @@ class WidgetPreferenceStore(context: Context) : WidgetPreferenceGateway {
 
     override fun slot(appWidgetId: Int): CommuteSlot? {
         val key = slotKey(appWidgetId)
-        val stored = preferences.getString(key, null) ?: return null
-        return runCatching { CommuteSlot.valueOf(stored) }.getOrElse {
+        if (!preferences.contains(key)) return null
+        return runCatching {
+            CommuteSlot.valueOf(requireNotNull(preferences.getString(key, null)))
+        }.getOrElse {
             preferences.edit().remove(key).apply()
             null
         }
