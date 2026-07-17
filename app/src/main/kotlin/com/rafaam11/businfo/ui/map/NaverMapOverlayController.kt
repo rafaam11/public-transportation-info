@@ -5,17 +5,19 @@ import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraUpdate
 import com.naver.maps.map.NaverMap
+import com.naver.maps.map.overlay.Align
 import com.naver.maps.map.overlay.Marker
-import com.naver.maps.map.overlay.OverlayImage
 import com.naver.maps.map.overlay.PathOverlay
-import com.rafaam11.businfo.R
 import com.rafaam11.businfo.domain.GeoPoint
 import com.rafaam11.businfo.domain.RouteGeometry
 import com.rafaam11.businfo.domain.RouteSegment
 import com.rafaam11.businfo.ui.MapVehicleUi
 import com.rafaam11.businfo.ui.RealtimeMapUiState
 
-class NaverMapOverlayController {
+class NaverMapOverlayController(
+    private val markerRenderer: BusMarkerRenderer = BusMarkerRenderer(),
+    private val iconCache: BusMarkerIconCache = BusMarkerIconCache(markerRenderer),
+) {
     private val paths = mutableListOf<PathOverlay>()
     private val stopMarkers = mutableListOf<Marker>()
     private val vehicleMarkers = mutableListOf<Marker>()
@@ -26,10 +28,10 @@ class NaverMapOverlayController {
         map: NaverMap,
         state: RealtimeMapUiState,
         onVehicleSelected: (String) -> Unit,
+        density: Float,
     ) {
         clear(paths)
         clear(stopMarkers)
-        clear(vehicleMarkers)
 
         state.geometry?.segments.orEmpty()
             .filter { it.points.size >= 2 }
@@ -55,24 +57,27 @@ class NaverMapOverlayController {
             }
         }
 
-        state.visibleVehicles.forEach { vehicle ->
-            vehicleMarkers += Marker().apply {
-                position = vehicle.point.toLatLng()
-                icon = OverlayImage.fromResource(R.drawable.ic_bus_marker)
-                tag = vehicle.key
-                captionText = vehicle.remainingStops?.let { remaining ->
-                    when {
-                        remaining > 0 -> "${remaining}정거장 전"
-                        remaining == 0 -> "도착"
-                        else -> "통과"
-                    }
-                }.orEmpty()
-                setOnClickListener { overlay ->
-                    onVehicleSelected(overlay.tag as String)
-                    true
-                }
-                this.map = map
+        ensureVehicleMarkerCount(state.visibleVehicles.size)
+        val routeNo = state.selection?.routeNo.orEmpty()
+        val palette = RoutePaletteResolver.resolve(state.selection?.routeTypeCode)
+        val routeFallback = markerRenderer.captionFallback(routeNo, density)
+        state.visibleVehicles.sortedBy(MapVehicleUi::key).forEachIndexed { index, vehicle ->
+            val marker = vehicleMarkers[index]
+            val selected = vehicle.key == state.selectedVehicleKey
+            marker.position = vehicle.point.toLatLng()
+            marker.icon = iconCache.icon(routeNo, palette, selected, density)
+            marker.angle = state.geometry?.let { VehicleHeadingResolver.resolve(vehicle.point, it) } ?: 0f
+            marker.isFlat = true
+            marker.isCaptionPerspectiveEnabled = false
+            marker.setCaptionAligns(Align.Bottom)
+            marker.captionText = arrivalCaption(vehicle.remainingStops, routeFallback)
+            marker.tag = vehicle.key
+            marker.zIndex = if (vehicle.key == state.selectedVehicleKey) 20 else 10
+            marker.setOnClickListener { overlay ->
+                onVehicleSelected(overlay.tag as String)
+                true
             }
+            marker.map = map
         }
     }
 
@@ -99,6 +104,25 @@ class NaverMapOverlayController {
         clear(paths)
         clear(stopMarkers)
         clear(vehicleMarkers)
+        iconCache.evictAll()
+    }
+
+    private fun ensureVehicleMarkerCount(count: Int) {
+        while (vehicleMarkers.size < count) vehicleMarkers += Marker()
+        while (vehicleMarkers.size > count) {
+            vehicleMarkers.removeAt(vehicleMarkers.lastIndex).map = null
+        }
+    }
+
+    private fun arrivalCaption(remainingStops: Int?, routeFallback: String?): String {
+        val arrival = remainingStops?.let { remaining ->
+            when {
+                remaining > 0 -> "${remaining}정거장 전"
+                remaining == 0 -> "도착"
+                else -> "통과"
+            }
+        }.orEmpty()
+        return listOf(arrival, routeFallback.orEmpty()).filter(String::isNotEmpty).joinToString(" · ")
     }
 
     private fun <T> clear(overlays: MutableList<T>) where T : com.naver.maps.map.overlay.Overlay {

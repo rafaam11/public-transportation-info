@@ -32,6 +32,7 @@ fun NaverRealtimeMap(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val savedState = rememberSaveable { Bundle() }
     val mapView = remember { MapView(context).also { it.onCreate(savedState) } }
+    val density = context.resources.displayMetrics.density
     var naverMap by remember { mutableStateOf<NaverMap?>(null) }
     val controller = remember { NaverMapOverlayController() }
 
@@ -107,8 +108,16 @@ fun NaverRealtimeMap(
     }
 
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-    LaunchedEffect(naverMap, state.geometry, state.stops, state.visibleVehicles) {
-        naverMap?.let { controller.render(it, state, onVehicleSelected) }
+    LaunchedEffect(
+        naverMap,
+        state.geometry,
+        state.stops,
+        state.visibleVehicles,
+        state.selectedVehicleKey,
+        state.selection,
+        density,
+    ) {
+        naverMap?.let { controller.render(it, state, onVehicleSelected, density) }
     }
     LaunchedEffect(naverMap, state.geometry, state.vehicleBatch, state.vehicleError, fitRouteRequest) {
         naverMap?.let { controller.fitRouteOnceOrOnRequest(it, state, fitRouteRequest) }

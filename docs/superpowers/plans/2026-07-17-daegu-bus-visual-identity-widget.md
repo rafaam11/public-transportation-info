@@ -346,7 +346,7 @@ bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 assertTrue(pixels.count { Color.alpha(it) > 0 } > bitmap.width * bitmap.height / 4)
 ```
 
-Render a synthetic overlong route name and assert the full input is retained in the renderer result metadata and exposed as the horizontal caption fallback. Assert every official palette has a WCAG contrast ratio of at least `4.5`; `BusMarkerRenderer` rejects a lower-contrast custom palette so the icon cache exercises its drawable fallback. Call the cache twice with an identical key and assert the same `OverlayImage` instance is reused.
+Render a synthetic overlong route name and assert the full input is retained in the renderer result metadata and exposed as the horizontal caption fallback. Preserve the approved official body/text color table exactly even where its numeric WCAG ratio is below `4.5`; render a thin contrasting text outline or shadow instead of changing or rejecting official colors. Call the cache twice with an identical key and assert the same `OverlayImage` instance is reused.
 
 Add a source contract test requiring `OverlayImage.fromBitmap`, `marker.angle`, `marker.isFlat = true`, and no coordinate reassignment through a projection/snapping helper.
 
@@ -377,7 +377,7 @@ while (paint.measureText(routeNo) > maxTextWidth && textSize > 8f * density) {
 }
 ```
 
-Use the palette text color, center alignment, anti-aliasing, and a selected white stroke before filling the body. Keep all dimensions in named dp constants inside `BusMarkerRenderer`.
+Use the exact palette text color for the fill, center alignment, anti-aliasing, and a thin contrasting text outline or shadow for legibility. Draw a selected white stroke before filling the body. Keep all dimensions in named dp constants inside `BusMarkerRenderer`.
 
 - [ ] **Step 4: Add an LRU icon cache**
 
