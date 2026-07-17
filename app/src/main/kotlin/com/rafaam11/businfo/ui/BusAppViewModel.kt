@@ -42,11 +42,19 @@ class BusAppViewModel(
     fun submitKey(key: String) {
         val state = _uiState.value as? AppUiState.NeedsKey ?: return
         if (state.submitting || key.isBlank()) return
-        _uiState.value = AppUiState.NeedsKey(submitting = true)
+        _uiState.value = state.copy(submitting = true, error = null)
         viewModelScope.launch(dispatcher) {
             val error = credentials.validateAndSave(key)
-            if (error == null) enterDashboard() else _uiState.value = AppUiState.NeedsKey(error = error)
+            if (error == null) enterDashboard() else {
+                _uiState.value = state.copy(error = error)
+            }
         }
+    }
+
+    fun beginKeyChange() {
+        if (!credentials.savedKeyExists()) return
+        dashboardJob?.cancel()
+        _uiState.value = AppUiState.NeedsKey(changeMode = true)
     }
 
     fun clearKey() {

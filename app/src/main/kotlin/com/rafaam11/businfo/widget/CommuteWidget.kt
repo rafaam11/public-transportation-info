@@ -77,7 +77,7 @@ private fun CompactCommuteWidgetContent(context: Context, state: CommuteWidgetUi
                 modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold),
             )
-            Text(statusLabel(state), style = TextStyle(color = mutedColor, fontSize = 9.sp))
+            Text(widgetStatusLabel(state, Instant.now()), style = TextStyle(color = mutedColor, fontSize = 9.sp))
         }
         Spacer(GlanceModifier.height(3.dp))
         if (state.requiresConfiguration) {
@@ -139,7 +139,7 @@ private fun ExpandedCommuteWidgetContent(context: Context, state: CommuteWidgetU
                 style = TextStyle(color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold),
             )
             Text(
-                statusLabel(state),
+                widgetStatusLabel(state, Instant.now()),
                 style = TextStyle(color = mutedColor, fontSize = 11.sp),
             )
         }
@@ -220,8 +220,7 @@ private fun configurationAction(context: Context, appWidgetId: Int): Action = ac
 private fun widgetAction(context: Context, state: CommuteWidgetUiState): Action =
     if (state.refreshError == BusDataError.InvalidCredential) {
         actionStartActivity(
-            Intent(context, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_OPEN_KEY_SETTINGS, true),
+            Intent(context, WidgetKeySettingsActivity::class.java),
         )
     } else {
         actionRunCallback<RefreshCommuteWidgetAction>()
@@ -233,17 +232,18 @@ private fun widgetActionLabel(state: CommuteWidgetUiState): String = when {
     else -> "새로고침"
 }
 
-private fun statusLabel(state: CommuteWidgetUiState): String = when {
-    state.refreshError != null -> when (state.refreshError) {
-        BusDataError.InvalidCredential -> "API 키 확인 필요"
-        BusDataError.RateLimited -> "요청 한도 초과"
-        BusDataError.NetworkUnavailable -> "네트워크 오류"
-        BusDataError.ServiceUnavailable -> "서비스 오류"
-        BusDataError.MalformedResponse -> "응답 오류"
-    }
+internal fun widgetStatusLabel(state: CommuteWidgetUiState, now: Instant): String = when {
+    state.refreshError != null -> "갱신 실패 · ${elapsedLabel(state.refreshErrorAt, now)}"
     state.isRefreshing -> "업데이트 중"
     state.fetchedAt == null -> "조회 전"
-    else -> "${Duration.between(state.fetchedAt, Instant.now()).seconds.coerceAtLeast(0)}초 전"
+    else -> elapsedLabel(state.fetchedAt.toEpochMilli(), now)
+}
+
+private fun elapsedLabel(epochMillis: Long?, now: Instant): String {
+    val seconds = epochMillis?.let { at ->
+        Duration.between(Instant.ofEpochMilli(at), now).seconds.coerceAtLeast(0)
+    } ?: 0
+    return if (seconds < 60) "${seconds}초 전" else "${seconds / 60}분 전"
 }
 
 class RefreshCommuteWidgetAction : ActionCallback {

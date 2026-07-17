@@ -12,12 +12,14 @@ import com.naver.maps.map.NaverMapSdk
 import com.rafaam11.businfo.ui.BusAppViewModel
 import com.rafaam11.businfo.ui.RealtimeMapViewModel
 import com.rafaam11.businfo.domain.CommuteSlot
+import com.rafaam11.businfo.widget.KeySettingsRequestStore
 import java.time.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val openMapSlot = MutableStateFlow<CommuteSlot?>(null)
     private val openKeySettings = MutableStateFlow(false)
+    private val keySettingsRequests by lazy { KeySettingsRequestStore(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +63,6 @@ class MainActivity : ComponentActivity() {
                 },
                 openKeySettings = keySettings,
                 onOpenKeySettingsConsumed = {
-                    intent.removeExtra(EXTRA_OPEN_KEY_SETTINGS)
                     openKeySettings.value = false
                 },
             )
@@ -78,11 +79,10 @@ class MainActivity : ComponentActivity() {
         openMapSlot.value = intent?.getStringExtra(EXTRA_OPEN_MAP_SLOT)?.let { name ->
             runCatching { CommuteSlot.valueOf(name) }.getOrNull()
         }
-        openKeySettings.value = intent?.getBooleanExtra(EXTRA_OPEN_KEY_SETTINGS, false) == true
+        openKeySettings.value = keySettingsRequests.consume()
     }
 
     companion object {
         const val EXTRA_OPEN_MAP_SLOT = "com.rafaam11.businfo.extra.OPEN_MAP_SLOT"
-        const val EXTRA_OPEN_KEY_SETTINGS = "com.rafaam11.businfo.extra.OPEN_KEY_SETTINGS"
     }
 }

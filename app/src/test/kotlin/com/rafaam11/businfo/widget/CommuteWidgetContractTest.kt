@@ -23,6 +23,18 @@ class CommuteWidgetContractTest {
     }
 
     @Test
+    fun configurationRejectsIdsNotOwnedByThisWidgetProvider() {
+        val configuration = File(
+            repoRoot,
+            "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetConfigurationActivity.kt",
+        ).readText()
+
+        assertTrue(configuration.contains("getAppWidgetInfo(appWidgetId)?.provider"))
+        assertTrue(configuration.contains("ComponentName(this, CommuteWidgetReceiver::class.java)"))
+        assertTrue(configuration.contains("setResult(Activity.RESULT_CANCELED)"))
+    }
+
+    @Test
     fun providerDisablesPeriodicWorkAndSupportsConfigurationAndResize() {
         val provider = File(repoRoot, "app/src/main/res/xml/commute_widget_info.xml").readText()
 
@@ -35,17 +47,30 @@ class CommuteWidgetContractTest {
     }
 
     @Test
-    fun activityDeclaresAndConsumesWidgetNavigationExtras() {
+    fun activityConsumesOnlyPrivateOneShotKeyRequestAndIgnoresMaliciousExtra() {
         val activity = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/MainActivity.kt").readText()
         val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
+        val trampoline = File(
+            repoRoot,
+            "app/src/main/kotlin/com/rafaam11/businfo/widget/WidgetKeySettingsActivity.kt",
+        )
 
         assertTrue(activity.contains("EXTRA_OPEN_MAP_SLOT"))
-        assertTrue(activity.contains("EXTRA_OPEN_KEY_SETTINGS"))
+        assertFalse(activity.contains("EXTRA_OPEN_KEY_SETTINGS"))
+        assertTrue(activity.contains("keySettingsRequests.consume()"))
         assertTrue(activity.contains("onNewIntent"))
         assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_MAP_SLOT)"))
-        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_KEY_SETTINGS)"))
+        assertTrue(trampoline.isFile)
+        assertTrue(trampoline.readText().contains("keySettingsRequests.request()"))
         assertTrue(app.contains("nav.navigate(\"map/${'$'}{slot.name}\")"))
         assertTrue(app.contains("onOpenMapSlotConsumed"))
+    }
+
+    @Test
+    fun keySettingsTrampolineIsNotExported() {
+        val manifest = File(repoRoot, "app/src/main/AndroidManifest.xml").readText()
+
+        assertTrue(Regex("WidgetKeySettingsActivity[\\s\\S]*?android:exported=\"false\"").containsMatchIn(manifest))
     }
 
     @Test
@@ -69,6 +94,8 @@ class CommuteWidgetContractTest {
         assertFalse(widget.contains("glanceId as"))
         assertTrue(widget.contains("commuteWidgetRepository.refresh(appWidgetId)"))
         assertTrue(widget.contains("API 키 변경"))
+        assertTrue(widget.contains("Intent(context, WidgetKeySettingsActivity::class.java)"))
+        assertFalse(widget.contains("EXTRA_OPEN_KEY_SETTINGS"))
         assertTrue(widget.contains("카드를 다시 설정해 주세요"))
         assertTrue(notifier.contains("CommuteWidget().updateAll(applicationContext)"))
         assertTrue(receiver.contains("appWidgetIds.forEach(repository::clear)"))

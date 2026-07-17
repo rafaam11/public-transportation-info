@@ -3,6 +3,7 @@ package com.rafaam11.businfo.widget
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,7 +35,11 @@ class CommuteWidgetConfigurationActivity : ComponentActivity() {
             AppWidgetManager.EXTRA_APPWIDGET_ID,
             AppWidgetManager.INVALID_APPWIDGET_ID,
         )
-        if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+        val owner = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)?.provider
+        if (
+            appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID ||
+            owner != ComponentName(this, CommuteWidgetReceiver::class.java)
+        ) {
             finish()
             return
         }

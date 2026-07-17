@@ -61,7 +61,12 @@ class CommuteWidgetRepository(
         val snapshot = slot?.let { configured ->
             dashboard.observeDashboard().first().firstOrNull { it.selection.slot == configured }
         }
-        val error = preferences.errorState(appWidgetId)
+        val storedError = preferences.errorState(appWidgetId)
+        val errorIsObsolete = storedError != null && snapshot?.fetchedAt?.toEpochMilli()?.let { fetchedAt ->
+            fetchedAt > storedError.atEpochMillis
+        } == true
+        if (errorIsObsolete) preferences.saveError(appWidgetId, null, null)
+        val error = storedError.takeUnless { errorIsObsolete }
         val arrival = snapshot?.arrivals?.firstOrNull()
         return CommuteWidgetUiState(
             appWidgetId = appWidgetId,

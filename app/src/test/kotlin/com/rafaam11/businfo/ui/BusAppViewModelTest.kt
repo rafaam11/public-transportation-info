@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -49,6 +50,22 @@ class BusAppViewModelTest {
         assertTrue(credential.hasKey)
     }
 
+    @Test fun `failed replacement validation preserves old key`() = runTest {
+        val credential = FakeCredential(true, validationError = BusDataError.InvalidCredential)
+        val viewModel = BusAppViewModel(credential, FakeDashboard(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.beginKeyChange()
+        viewModel.submitKey("bad replacement")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as AppUiState.NeedsKey
+        assertTrue(state.changeMode)
+        assertEquals(BusDataError.InvalidCredential, state.error)
+        assertTrue(credential.hasKey)
+        assertFalse(credential.clearCalled)
+    }
+
     @Test fun `catalog retry forces a new basic sync`() = runTest {
         val dashboard = FakeDashboard()
         val viewModel = BusAppViewModel(FakeCredential(true), dashboard, StandardTestDispatcher(testScheduler))
@@ -76,10 +93,17 @@ class BusAppViewModelTest {
         assertEquals("1", dashboard.savedFavorite?.routeTypeCode)
     }
 
-    private class FakeCredential(var hasKey: Boolean) : CredentialGateway {
+    private class FakeCredential(
+        var hasKey: Boolean,
+        var validationError: BusDataError? = null,
+    ) : CredentialGateway {
+        var clearCalled = false
         override fun savedKeyExists() = hasKey
-        override suspend fun validateAndSave(key: String): BusDataError? { hasKey = true; return null }
-        override fun clearKey() { hasKey = false }
+        override suspend fun validateAndSave(key: String): BusDataError? {
+            if (validationError == null) hasKey = true
+            return validationError
+        }
+        override fun clearKey() { clearCalled = true; hasKey = false }
     }
 
     private class FakeDashboard : DashboardDataSource {

@@ -1,6 +1,7 @@
 package com.rafaam11.businfo.ui.map
 
 import android.graphics.Color
+import android.graphics.PointF
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraUpdate
@@ -65,6 +66,7 @@ class NaverMapOverlayController(
             val marker = vehicleMarkers[index]
             val selected = vehicle.key == state.selectedVehicleKey
             marker.position = vehicle.point.toLatLng()
+            marker.anchor = PointF(0.5f, 0.5f)
             marker.icon = iconCache.icon(routeNo, palette, selected, density)
             marker.angle = state.geometry?.let { VehicleHeadingResolver.resolve(vehicle.point, it) } ?: 0f
             marker.isFlat = true

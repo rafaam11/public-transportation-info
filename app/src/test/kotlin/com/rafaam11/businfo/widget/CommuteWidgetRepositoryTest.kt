@@ -127,6 +127,27 @@ class CommuteWidgetRepositoryTest {
         assertEquals(listOf(prior), dashboard.snapshots.value)
     }
 
+    @Test fun `newer room snapshot suppresses and clears obsolete widget refresh error`() = runTest {
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        preferences.saveError(
+            WIDGET_ID,
+            BusDataError.ServiceUnavailable,
+            now.minusSeconds(30).toEpochMilli(),
+        )
+        dashboard.snapshots.value = listOf(snapshot(
+            arrivals = listOf(ArrivalEstimate(2, 120, "2분")),
+            fetchedAt = now,
+        ))
+
+        val state = repository.state(WIDGET_ID, now)
+
+        assertNull(state.refreshError)
+        assertNull(state.refreshErrorAt)
+        assertNull(preferences.errorState(WIDGET_ID))
+        assertEquals("2정거장 전", state.primaryText)
+        assertTrue(dashboard.refreshedSlots.isEmpty())
+    }
+
     @Test fun `missing API key is exposed as refresh failure`() = runTest {
         preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
         dashboard.snapshots.value = listOf(snapshot(emptyList(), null))

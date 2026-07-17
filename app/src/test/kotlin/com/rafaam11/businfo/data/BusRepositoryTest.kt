@@ -36,6 +36,16 @@ class BusRepositoryTest {
         assertTrue(repository.savedKeyExists())
     }
 
+    @Test fun failedReplacementLeavesPreviouslySavedCredentialUntouched() = runTest {
+        credentials.write("old-key")
+        remote.validationResults.add(RemoteResult.Failure(BusDataError.InvalidCredential))
+
+        assertEquals(BusDataError.InvalidCredential, repository.validateAndSave("new-key"))
+
+        assertEquals("old-key", credentials.read())
+        assertEquals(listOf("new-key"), remote.validatedKeys)
+    }
+
     @Test fun clearingCredentialDoesNotDependOnDashboardDatabase() {
         credentials.write("saved-key")
         repository.clearKey()

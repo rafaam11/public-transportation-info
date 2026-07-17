@@ -10,7 +10,11 @@ import com.rafaam11.businfo.domain.RouteSummary
 
 sealed interface AppUiState {
     data object Starting : AppUiState
-    data class NeedsKey(val submitting: Boolean = false, val error: BusDataError? = null) : AppUiState
+    data class NeedsKey(
+        val submitting: Boolean = false,
+        val error: BusDataError? = null,
+        val changeMode: Boolean = false,
+    ) : AppUiState
     data class Ready(
         val cards: List<DashboardCardUiState>,
         val catalogPreparing: Boolean = false,

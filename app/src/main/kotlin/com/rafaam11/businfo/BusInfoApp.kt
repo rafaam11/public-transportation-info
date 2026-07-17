@@ -47,7 +47,7 @@ fun BusInfoApp(
     val realtimeState by realtimeMapViewModel.uiState.collectAsState()
     LaunchedEffect(openKeySettings) {
         if (openKeySettings) {
-            viewModel.clearKey()
+            viewModel.beginKeyChange()
             onOpenKeySettingsConsumed()
         }
     }

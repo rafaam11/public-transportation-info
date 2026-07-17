@@ -24,6 +24,7 @@ class NaverMapOverlayContractTest {
         assertTrue(renderer.readText().contains("OverlayImage.fromBitmap"))
         assertTrue(controller.contains("marker.angle ="))
         assertTrue(controller.contains("marker.isFlat = true"))
+        assertTrue(controller.contains("marker.anchor = PointF(0.5f, 0.5f)"))
         assertTrue(controller.contains("marker.position = vehicle.point.toLatLng()"))
         assertFalse(controller.contains("projectVehicle"))
         assertFalse(controller.contains("snapVehicle"))

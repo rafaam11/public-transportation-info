@@ -139,7 +139,7 @@ private fun ConfiguredCommuteCard(
 @Composable
 fun KeyEntryScreen(state: AppUiState.NeedsKey, onSubmit: (String) -> Unit) {
     var key by remember { mutableStateOf("") }
-    Scaffold(topBar = { TopAppBar(title = { Text("대구 버스 API 연결") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(if (state.changeMode) "대구 버스 API 키 변경" else "대구 버스 API 연결") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("공공데이터 API 키 입력", style = MaterialTheme.typography.headlineSmall)
             Text("data.go.kr에서 발급받은 일반 인증키를 입력하세요.")
@@ -150,7 +150,7 @@ fun KeyEntryScreen(state: AppUiState.NeedsKey, onSubmit: (String) -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
             Button(onClick = { onSubmit(key) }, modifier = Modifier.fillMaxWidth(), enabled = key.isNotBlank() && !state.submitting) {
-                Text(if (state.submitting) "키 확인 중" else "키 저장하고 시작")
+                Text(if (state.submitting) "키 확인 중" else if (state.changeMode) "새 키 확인하고 변경" else "키 저장하고 시작")
             }
         }
     }
