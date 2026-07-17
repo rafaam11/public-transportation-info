@@ -42,8 +42,21 @@ class CommuteWidgetContractTest {
         assertTrue(activity.contains("EXTRA_OPEN_MAP_SLOT"))
         assertTrue(activity.contains("EXTRA_OPEN_KEY_SETTINGS"))
         assertTrue(activity.contains("onNewIntent"))
+        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_MAP_SLOT)"))
+        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_KEY_SETTINGS)"))
         assertTrue(app.contains("nav.navigate(\"map/${'$'}{slot.name}\")"))
         assertTrue(app.contains("onOpenMapSlotConsumed"))
+    }
+
+    @Test
+    fun widgetHasDistinctCompactAndExpandedResponsiveLayouts() {
+        val widget = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidget.kt").readText()
+
+        assertTrue(widget.contains("DpSize(180.dp, 110.dp)"))
+        assertTrue(widget.contains("DpSize(300.dp, 180.dp)"))
+        assertTrue(widget.contains("LocalSize.current"))
+        assertTrue(widget.contains("CompactCommuteWidgetContent"))
+        assertTrue(widget.contains("ExpandedCommuteWidgetContent"))
     }
 
     @Test

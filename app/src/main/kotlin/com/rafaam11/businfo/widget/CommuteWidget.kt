@@ -5,11 +5,14 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalSize
+import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
@@ -56,21 +59,79 @@ class CommuteWidget : GlanceAppWidget() {
 
 @Composable
 private fun CommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
+    if (LocalSize.current.height < 150.dp) {
+        CompactCommuteWidgetContent(context, state)
+    } else {
+        ExpandedCommuteWidgetContent(context, state)
+    }
+}
+
+@Composable
+private fun CompactCommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
     val textColor = ColorProvider(Color(0xFF17212B))
     val mutedColor = ColorProvider(Color(0xFF52606D))
-    val openAction = state.slot?.let { slot ->
-        actionRunCallback<OpenCommuteMapAction>(
-            actionParametersOf(OpenCommuteMapAction.slotKey to slot.name),
-        )
-    }
-    val cardModifier = GlanceModifier
-        .fillMaxSize()
-        .background(day = Color(0xFFFFFCF5), night = Color(0xFFFFFCF5))
-        .cornerRadius(18.dp)
-        .padding(16.dp)
-        .let { modifier -> openAction?.let(modifier::clickable) ?: modifier }
+    Column(widgetCardModifier(state, padding = 8.dp, cornerRadius = 14.dp)) {
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                state.slot?.label ?: "버스 카드",
+                modifier = GlanceModifier.defaultWeight(),
+                style = TextStyle(color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+            )
+            Text(statusLabel(state), style = TextStyle(color = mutedColor, fontSize = 9.sp))
+        }
+        Spacer(GlanceModifier.height(3.dp))
+        if (state.requiresConfiguration) {
+            Text("카드를 다시 설정해 주세요", style = TextStyle(color = textColor, fontSize = 11.sp))
+            Spacer(GlanceModifier.defaultWeight())
+            Text(
+                "설정",
+                modifier = GlanceModifier.clickable(configurationAction(context, state.appWidgetId)),
+                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            )
+            return@Column
+        }
 
-    Column(cardModifier) {
+        val palette = RoutePaletteResolver.resolve(state.routeTypeCode)
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                state.routeNo.orEmpty(),
+                modifier = GlanceModifier
+                    .background(day = Color(palette.bodyColor), night = Color(palette.bodyColor))
+                    .cornerRadius(9.dp)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                style = TextStyle(
+                    color = ColorProvider(Color(palette.textColor)),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Text(
+                "  ${if (state.isRefreshing && state.primaryText.isBlank()) "불러오는 중…" else state.primaryText}",
+                modifier = GlanceModifier.defaultWeight(),
+                style = TextStyle(color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Bold),
+            )
+        }
+        Spacer(GlanceModifier.defaultWeight())
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(
+                "${state.stopName.orEmpty()} · ${state.directionLabel.orEmpty()}",
+                modifier = GlanceModifier.defaultWeight(),
+                style = TextStyle(color = mutedColor, fontSize = 9.sp),
+            )
+            Text(
+                widgetActionLabel(state),
+                modifier = GlanceModifier.clickable(widgetAction(context, state)),
+                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 9.sp, fontWeight = FontWeight.Bold),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExpandedCommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
+    val textColor = ColorProvider(Color(0xFF17212B))
+    val mutedColor = ColorProvider(Color(0xFF52606D))
+    Column(widgetCardModifier(state, padding = 16.dp, cornerRadius = 18.dp)) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 state.slot?.label ?: "버스 카드",
@@ -88,12 +149,7 @@ private fun CommuteWidgetContent(context: Context, state: CommuteWidgetUiState) 
             Spacer(GlanceModifier.defaultWeight())
             Text(
                 "설정",
-                modifier = GlanceModifier.clickable(
-                    actionStartActivity(
-                        Intent(context, CommuteWidgetConfigurationActivity::class.java)
-                            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, state.appWidgetId),
-                    ),
-                ),
+                modifier = GlanceModifier.clickable(configurationAction(context, state.appWidgetId)),
                 style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontWeight = FontWeight.Bold),
             )
             return@Column
@@ -133,22 +189,48 @@ private fun CommuteWidgetContent(context: Context, state: CommuteWidgetUiState) 
                 modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(color = mutedColor, fontSize = 11.sp),
             )
-            val invalidCredential = state.refreshError == BusDataError.InvalidCredential
-            val action = if (invalidCredential) {
-                actionStartActivity(
-                    Intent(context, MainActivity::class.java)
-                        .putExtra(MainActivity.EXTRA_OPEN_KEY_SETTINGS, true),
-                )
-            } else {
-                actionRunCallback<RefreshCommuteWidgetAction>()
-            }
             Text(
-                if (invalidCredential) "API 키 변경" else if (state.isRefreshing) "새로고침 중…" else "새로고침",
-                modifier = GlanceModifier.clickable(action),
+                widgetActionLabel(state),
+                modifier = GlanceModifier.clickable(widgetAction(context, state)),
                 style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 12.sp, fontWeight = FontWeight.Bold),
             )
         }
     }
+}
+
+private fun widgetCardModifier(state: CommuteWidgetUiState, padding: Dp, cornerRadius: Dp): GlanceModifier {
+    val openAction = state.slot?.let { slot ->
+        actionRunCallback<OpenCommuteMapAction>(
+            actionParametersOf(OpenCommuteMapAction.slotKey to slot.name),
+        )
+    }
+    return GlanceModifier
+        .fillMaxSize()
+        .background(day = Color(0xFFFFFCF5), night = Color(0xFFFFFCF5))
+        .cornerRadius(cornerRadius)
+        .padding(padding)
+        .let { modifier -> openAction?.let(modifier::clickable) ?: modifier }
+}
+
+private fun configurationAction(context: Context, appWidgetId: Int): Action = actionStartActivity(
+    Intent(context, CommuteWidgetConfigurationActivity::class.java)
+        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+)
+
+private fun widgetAction(context: Context, state: CommuteWidgetUiState): Action =
+    if (state.refreshError == BusDataError.InvalidCredential) {
+        actionStartActivity(
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN_KEY_SETTINGS, true),
+        )
+    } else {
+        actionRunCallback<RefreshCommuteWidgetAction>()
+    }
+
+private fun widgetActionLabel(state: CommuteWidgetUiState): String = when {
+    state.refreshError == BusDataError.InvalidCredential -> "API 키 변경"
+    state.isRefreshing -> "새로고침 중…"
+    else -> "새로고침"
 }
 
 private fun statusLabel(state: CommuteWidgetUiState): String = when {

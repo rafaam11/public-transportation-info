@@ -173,6 +173,27 @@ class CommuteWidgetRepositoryTest {
         assertFalse(repository.state(WIDGET_ID, now).isRefreshing)
     }
 
+    @Test fun `clear during failed refresh prevents deleted error from being recreated`() = runTest {
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        dashboard.refreshError = BusDataError.ServiceUnavailable
+        dashboard.refreshGate = CompletableDeferred()
+        val started = CompletableDeferred<Unit>()
+        val refresh = async { repository.refresh(WIDGET_ID) { started.complete(Unit) } }
+        started.await()
+
+        repository.clear(WIDGET_ID)
+        dashboard.refreshGate!!.complete(Unit)
+
+        assertEquals(WidgetRefreshResult.Failed(BusDataError.ServiceUnavailable), refresh.await())
+        assertNull(preferences.errorState(WIDGET_ID))
+        assertFalse(repository.state(WIDGET_ID, now).isRefreshing)
+
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        dashboard.refreshError = null
+        assertEquals(WidgetRefreshResult.Success, repository.refresh(WIDGET_ID))
+        assertEquals(2, dashboard.refreshedSlots.size)
+    }
+
     private fun snapshot(arrivals: List<ArrivalEstimate>, fetchedAt: Instant?) =
         FavoriteDashboardSnapshot(favorite, arrivals, fetchedAt)
 

@@ -55,9 +55,15 @@ class MainActivity : ComponentActivity() {
                 viewModel = busViewModel,
                 realtimeMapViewModel = realtimeMapViewModel,
                 openMapSlot = mapSlot,
-                onOpenMapSlotConsumed = { openMapSlot.value = null },
+                onOpenMapSlotConsumed = {
+                    intent.removeExtra(EXTRA_OPEN_MAP_SLOT)
+                    openMapSlot.value = null
+                },
                 openKeySettings = keySettings,
-                onOpenKeySettingsConsumed = { openKeySettings.value = false },
+                onOpenKeySettingsConsumed = {
+                    intent.removeExtra(EXTRA_OPEN_KEY_SETTINGS)
+                    openKeySettings.value = false
+                },
             )
         }
     }

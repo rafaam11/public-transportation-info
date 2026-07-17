@@ -37,8 +37,11 @@ class CommuteWidgetRepository(
     private val preferences: WidgetPreferenceGateway,
     private val clock: Clock,
 ) {
+    private class RefreshToken(@Volatile var valid: Boolean = true)
+
     private val refreshMutexes = ConcurrentHashMap<Int, Mutex>()
     private val refreshingIds = ConcurrentHashMap.newKeySet<Int>()
+    private val activeRefreshes = ConcurrentHashMap<Int, RefreshToken>()
 
     suspend fun state(appWidgetId: Int, now: Instant): CommuteWidgetUiState {
         val slot = preferences.slot(appWidgetId)
@@ -70,22 +73,37 @@ class CommuteWidgetRepository(
     ): WidgetRefreshResult {
         val mutex = refreshMutexes.computeIfAbsent(appWidgetId) { Mutex() }
         if (!mutex.tryLock()) return WidgetRefreshResult.AlreadyRunning
+        val token = RefreshToken()
+        activeRefreshes[appWidgetId] = token
         refreshingIds += appWidgetId
         return try {
             onStarted()
             val slot = preferences.slot(appWidgetId) ?: return WidgetRefreshResult.RequiresConfiguration
             val error = dashboard.refreshFavorite(slot)
-            preferences.saveError(appWidgetId, error, error?.let { clock.instant().toEpochMilli() })
+            synchronized(token) {
+                if (token.valid) {
+                    preferences.saveError(appWidgetId, error, error?.let { clock.instant().toEpochMilli() })
+                }
+            }
             if (error == null) WidgetRefreshResult.Success else WidgetRefreshResult.Failed(error)
         } finally {
-            refreshingIds -= appWidgetId
+            if (activeRefreshes.remove(appWidgetId, token)) refreshingIds -= appWidgetId
             mutex.unlock()
+            refreshMutexes.remove(appWidgetId, mutex)
         }
     }
 
     fun clear(appWidgetId: Int) {
-        preferences.clear(appWidgetId)
+        val token = activeRefreshes.remove(appWidgetId)
         refreshingIds -= appWidgetId
         refreshMutexes.remove(appWidgetId)
+        if (token == null) {
+            preferences.clear(appWidgetId)
+        } else {
+            synchronized(token) {
+                token.valid = false
+                preferences.clear(appWidgetId)
+            }
+        }
     }
 }
