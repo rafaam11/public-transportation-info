@@ -180,6 +180,28 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         )
     }
 
+    @Test fun wrongRouteVehicleRowsAreMalformedInsteadOfAConfirmedEmptyBatch() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope(
+            """[{"routeId":"another-route","routeNo":"999","moveDir":"0","xPos":128.6,"yPos":35.8}]""",
+        )))
+
+        assertEquals(
+            RemoteResult.Failure(BusDataError.MalformedResponse),
+            source.vehicles("secret", "3000814001"),
+        )
+    }
+
+    @Test fun implausibleVehicleCoordinatesAreMalformed() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope(
+            """[{"routeId":"3000814001","routeNo":"814","moveDir":"0","xPos":0.0,"yPos":0.0}]""",
+        )))
+
+        assertEquals(
+            RemoteResult.Failure(BusDataError.MalformedResponse),
+            source.vehicles("secret", "3000814001"),
+        )
+    }
+
     @Test fun cancellingCoroutineCancelsRealCallAndFreesDispatcherForNextRequest() = runBlocking {
         val dispatcher = okhttp3.Dispatcher().apply {
             maxRequests = 1

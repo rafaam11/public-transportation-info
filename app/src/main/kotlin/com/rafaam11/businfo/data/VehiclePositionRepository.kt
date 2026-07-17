@@ -8,6 +8,7 @@ import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleLoadResult
+import com.rafaam11.businfo.domain.hasPlausibleDaeguPosition
 import java.time.Clock
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,19 +26,31 @@ class VehiclePositionRepository(
     private val requestMutex = Mutex()
 
     override suspend fun refresh(selection: FavoriteSelection): VehicleLoadResult = requestMutex.withLock {
-        val retained = local.vehicleBatch(selection.routeId)?.forDirection(selection.directionCode)
+        val retained = local.vehicleBatch(selection.routeId)?.forSelection(selection)
         val key = credentials.read()
             ?: return@withLock VehicleLoadResult.Failure(BusDataError.InvalidCredential, retained)
         when (val result = remote.vehicles(key, selection.routeId)) {
             is RemoteResult.Failure -> VehicleLoadResult.Failure(result.error, retained)
             is RemoteResult.Success -> {
-                val complete = VehicleBatch.from(result.value, clock.instant())
+                val verified = result.value.filter { vehicle ->
+                    vehicle.routeId == selection.routeId && vehicle.hasPlausibleDaeguPosition()
+                }
+                if (result.value.isNotEmpty() && verified.isEmpty()) {
+                    return@withLock VehicleLoadResult.Failure(BusDataError.MalformedResponse, retained)
+                }
+                val complete = VehicleBatch.from(verified, clock.instant())
                 local.saveVehicleBatch(selection.routeId, complete)
-                VehicleLoadResult.Success(complete.forDirection(selection.directionCode))
+                VehicleLoadResult.Success(complete.forSelection(selection))
             }
         }
     }
 
-    private fun VehicleBatch.forDirection(direction: String) =
-        VehicleBatch.from(vehicles.filter { it.moveDirection == direction }, fetchedAt)
+    private fun VehicleBatch.forSelection(selection: FavoriteSelection) = VehicleBatch.from(
+        vehicles.filter { vehicle ->
+            vehicle.routeId == selection.routeId &&
+                vehicle.moveDirection == selection.directionCode &&
+                vehicle.hasPlausibleDaeguPosition()
+        },
+        fetchedAt,
+    )
 }

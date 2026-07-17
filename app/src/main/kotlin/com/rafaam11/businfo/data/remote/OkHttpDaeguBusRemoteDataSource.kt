@@ -12,6 +12,7 @@ import com.rafaam11.businfo.domain.RouteSummary
 import com.rafaam11.businfo.domain.RouteLink
 import com.rafaam11.businfo.domain.RouteNode
 import com.rafaam11.businfo.domain.VehicleSnapshot
+import com.rafaam11.businfo.domain.hasPlausibleDaeguPosition
 import java.io.IOException
 import java.time.Clock
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -46,7 +47,7 @@ class OkHttpDaeguBusRemoteDataSource(
         routeId: String,
     ): RemoteResult<List<VehicleSnapshot>> =
         when (val result = request("getPos02", serviceKey, mapOf("routeId" to routeId))) {
-            is RemoteResult.Success -> parseVehicles(result.value)
+            is RemoteResult.Success -> parseVehicles(routeId, result.value)
             is RemoteResult.Failure -> result
         }
 
@@ -130,11 +131,13 @@ class OkHttpDaeguBusRemoteDataSource(
         return RemoteResult.Success(items)
     }
 
-    private fun parseVehicles(items: JsonElement): RemoteResult<List<VehicleSnapshot>> {
+    private fun parseVehicles(expectedRouteId: String, items: JsonElement): RemoteResult<List<VehicleSnapshot>> {
         if (!items.isJsonArray) return RemoteResult.Failure(BusDataError.MalformedResponse)
         val array = items.asJsonArray
         if (array.isEmpty) return RemoteResult.Success(emptyList())
-        val vehicles = array.mapNotNull(::parseVehicle)
+        val vehicles = array.mapNotNull(::parseVehicle).filter { vehicle ->
+            vehicle.routeId == expectedRouteId && vehicle.hasPlausibleDaeguPosition()
+        }
         return if (vehicles.isEmpty()) {
             RemoteResult.Failure(BusDataError.MalformedResponse)
         } else {

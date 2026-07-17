@@ -24,6 +24,7 @@ data class RealtimeMapUiState(
     val vehicleBatch: VehicleBatch? = null,
     val visibleVehicles: List<MapVehicleUi> = emptyList(),
     val freshness: DataFreshness = DataFreshness.UNAVAILABLE,
+    val dataAgeSeconds: Long? = null,
     val loadingGeometry: Boolean = false,
     val geometryError: BusDataError? = null,
     val vehicleError: BusDataError? = null,

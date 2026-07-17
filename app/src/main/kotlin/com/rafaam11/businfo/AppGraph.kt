@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 
-class AppGraph(context: Context) {
+class AppGraph private constructor(context: Context) {
     private val credentials = SharedPreferencesCredentialStore(context.applicationContext)
     private val remote = OkHttpDaeguBusRemoteDataSource(
         client = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).build(),
@@ -35,4 +35,13 @@ class AppGraph(context: Context) {
     val routeGeometryRepository = RouteGeometryRepository(credentials, remote, local, Clock.systemUTC())
     val vehiclePositionRepository = VehiclePositionRepository(credentials, remote, local, Clock.systemUTC())
     val mapAuthMonitor = MapAuthMonitor()
+
+    companion object {
+        @Volatile
+        private var instance: AppGraph? = null
+
+        fun get(context: Context): AppGraph = instance ?: synchronized(this) {
+            instance ?: AppGraph(context.applicationContext).also { instance = it }
+        }
+    }
 }

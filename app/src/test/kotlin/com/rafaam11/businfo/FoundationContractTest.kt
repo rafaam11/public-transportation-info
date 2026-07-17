@@ -79,4 +79,18 @@ class FoundationContractTest {
         assertFalse(dashboardViewModel.contains("detailState"))
         assertFalse(dashboardViewModel.contains("loadDetail"))
     }
+
+    @Test
+    fun appGraphSurvivesActivityRecreation() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val graph = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/AppGraph.kt").readText()
+        val activity = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/MainActivity.kt").readText()
+
+        assertTrue(graph.contains("@Volatile"))
+        assertTrue(graph.contains("fun get(context: Context): AppGraph"))
+        assertTrue(activity.contains("AppGraph.get(applicationContext)"))
+        assertFalse(activity.contains("AppGraph(applicationContext)"))
+    }
 }

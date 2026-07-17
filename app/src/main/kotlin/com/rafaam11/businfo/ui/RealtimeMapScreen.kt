@@ -128,6 +128,15 @@ private fun RealtimeMapSheet(
         )
         selection?.let { Text("내 정류장 · ${it.stopName}") }
         Text(statusText)
+        state.dataAgeSeconds?.let { ageSeconds ->
+            val freshnessLabel = when (state.freshness) {
+                DataFreshness.FRESH -> "정상"
+                DataFreshness.DELAYED -> "지연"
+                DataFreshness.STALE -> "오래됨"
+                DataFreshness.UNAVAILABLE -> "수신 전"
+            }
+            Text("$freshnessLabel · ${ageSeconds}초 전")
+        }
         if (state.geometry != null && state.geometryError != null) {
             Text(
                 "캐시된 노선선을 표시하고 있습니다",

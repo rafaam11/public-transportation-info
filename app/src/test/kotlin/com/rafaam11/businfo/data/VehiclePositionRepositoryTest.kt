@@ -65,6 +65,32 @@ class VehiclePositionRepositoryTest {
         assertEquals(listOf("0"), result.retained!!.vehicles.map(VehicleSnapshot::moveDirection))
     }
 
+    @Test fun `nonempty response without a valid requested route retains cache and fails`() = runTest {
+        local.batch = VehicleBatch.from(listOf(vehicle("0")), now.minusSeconds(20))
+        remote.result = RemoteResult.Success(listOf(
+            vehicle("0").copy(routeId = "another-route"),
+            vehicle("0").copy(latitude = 0.0, longitude = 0.0),
+        ))
+
+        val result = repository.refresh(selection) as VehicleLoadResult.Failure
+
+        assertEquals(BusDataError.MalformedResponse, result.error)
+        assertEquals(1, result.retained!!.vehicles.size)
+        assertEquals(now.minusSeconds(20), local.batch!!.fetchedAt)
+    }
+
+    @Test fun `failed refresh never exposes implausible cached coordinates`() = runTest {
+        local.batch = VehicleBatch.from(
+            listOf(vehicle("0").copy(latitude = 0.0, longitude = 0.0)),
+            now.minusSeconds(20),
+        )
+        remote.result = RemoteResult.Failure(BusDataError.NetworkUnavailable)
+
+        val result = repository.refresh(selection) as VehicleLoadResult.Failure
+
+        assertTrue(result.retained!!.vehicles.isEmpty())
+    }
+
     private fun vehicle(direction: String) = VehicleSnapshot(
         "route", "급행8-1", direction, "stop", 5, 35.81, 128.61, null, null, null,
     )

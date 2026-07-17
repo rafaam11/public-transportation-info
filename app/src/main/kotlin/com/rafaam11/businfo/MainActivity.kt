@@ -13,7 +13,7 @@ import java.time.Clock
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val graph = AppGraph(applicationContext)
+        val graph = AppGraph.get(applicationContext)
         NaverMapSdk.getInstance(applicationContext).setOnAuthFailedListener { exception ->
             graph.mapAuthMonitor.report(exception.errorCode)
         }

@@ -41,6 +41,7 @@ class RealtimeMapScreenTest {
             MapVehicleUi("snapshot:0", GeoPoint(128.61, 35.81), "동대구역", 5, 2, null),
         ),
         freshness = DataFreshness.FRESH,
+        dataAgeSeconds = 0,
     )
 
     @Test
@@ -61,6 +62,7 @@ class RealtimeMapScreenTest {
         compose.onNodeWithText("가짜 지도").assertIsDisplayed()
         compose.onNodeWithText("급행8-1 · 검단동 방면").assertIsDisplayed()
         compose.onNodeWithText("내 정류장 · 효동초등학교건너").assertIsDisplayed()
+        compose.onNodeWithText("정상 · 0초 전").assertIsDisplayed()
     }
 
     @Test
@@ -96,5 +98,21 @@ class RealtimeMapScreenTest {
         }
 
         compose.onNodeWithText("현재 운행 차량 없음").assertIsDisplayed()
+    }
+
+    @Test
+    fun delayedStateShowsTheAgeOfTheLastConfirmedPosition() {
+        val delayedState = normalState.copy(
+            freshness = DataFreshness.DELAYED,
+            dataAgeSeconds = 22,
+        )
+
+        compose.setContent {
+            MaterialTheme {
+                RealtimeMapScreen(delayedState, {}, {}, {}, {}, mapContent = { _, _ -> })
+            }
+        }
+
+        compose.onNodeWithText("지연 · 22초 전").assertIsDisplayed()
     }
 }

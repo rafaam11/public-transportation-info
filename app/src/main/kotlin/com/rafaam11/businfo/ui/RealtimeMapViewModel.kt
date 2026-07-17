@@ -17,6 +17,7 @@ import com.rafaam11.businfo.domain.VehicleBatch
 import com.rafaam11.businfo.domain.VehicleLoadResult
 import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import java.time.Clock
+import java.time.Duration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +45,7 @@ class RealtimeMapViewModel(
     private var bootstrapJob: Job? = null
     private var pollingJob: Job? = null
     private var freshnessJob: Job? = null
+    private var terminalPollingError: Pair<CommuteSlot, BusDataError>? = null
     private val mapAuthJob = viewModelScope.launch(dispatcher) {
         mapAuthMonitor.errorCode.filterNotNull().collect { code ->
             pollingJob?.cancel()
@@ -65,10 +67,12 @@ class RealtimeMapViewModel(
         bootstrapJob?.cancel()
         pollingJob?.cancel()
         freshnessJob?.cancel()
+        if (terminalPollingError?.first != slot) terminalPollingError = null
         openedSlot = slot
         _uiState.value = RealtimeMapUiState(
             loadingGeometry = true,
             mapErrorCode = mapAuthMonitor.errorCode.value,
+            vehicleError = terminalPollingError?.second,
         )
         bootstrapJob = viewModelScope.launch(dispatcher) {
             val selection = dashboard.favorite(slot)
@@ -114,6 +118,7 @@ class RealtimeMapViewModel(
             mapAuthMonitor.clear()
             _uiState.value = _uiState.value.copy(mapErrorCode = null)
         }
+        terminalPollingError = null
         val selection = _uiState.value.selection ?: return
         if (_uiState.value.geometry == null) {
             bootstrapJob?.cancel()
@@ -164,6 +169,7 @@ class RealtimeMapViewModel(
         if (
             _uiState.value.geometry == null ||
             _uiState.value.mapErrorCode != null ||
+            terminalPollingError?.first == selection.slot ||
             !visible ||
             pollingJob?.isActive == true
         ) return
@@ -179,8 +185,14 @@ class RealtimeMapViewModel(
                     is VehicleLoadResult.Failure -> {
                         publishBatch(result.retained, result.error)
                         val pollResult = when (result.error) {
-                            BusDataError.InvalidCredential -> PollResult.AuthenticationFailure
-                            BusDataError.RateLimited -> PollResult.QuotaExceeded
+                            BusDataError.InvalidCredential -> {
+                                terminalPollingError = selection.slot to result.error
+                                PollResult.AuthenticationFailure
+                            }
+                            BusDataError.RateLimited -> {
+                                terminalPollingError = selection.slot to result.error
+                                PollResult.QuotaExceeded
+                            }
                             else -> PollResult.TransientFailure(++consecutiveFailures)
                         }
                         when (val decision = PollingPolicy.after(pollResult)) {
@@ -212,7 +224,12 @@ class RealtimeMapViewModel(
 
     private fun publishFreshness() {
         val current = _uiState.value
-        val freshness = FreshnessPolicy.classify(current.vehicleBatch?.fetchedAt, clock.instant())
+        val now = clock.instant()
+        val fetchedAt = current.vehicleBatch?.fetchedAt
+        val freshness = FreshnessPolicy.classify(fetchedAt, now)
+        val dataAgeSeconds = fetchedAt?.let { timestamp ->
+            Duration.between(timestamp, now).seconds.coerceAtLeast(0)
+        }
         val visibleVehicles = if (freshness == DataFreshness.STALE) {
             emptyList()
         } else {
@@ -220,7 +237,11 @@ class RealtimeMapViewModel(
                 current.selection?.let { selection -> mapVehicles(selection, current.stops, batch) }
             }.orEmpty()
         }
-        _uiState.value = current.copy(freshness = freshness, visibleVehicles = visibleVehicles)
+        _uiState.value = current.copy(
+            freshness = freshness,
+            dataAgeSeconds = dataAgeSeconds,
+            visibleVehicles = visibleVehicles,
+        )
     }
 
     private companion object {

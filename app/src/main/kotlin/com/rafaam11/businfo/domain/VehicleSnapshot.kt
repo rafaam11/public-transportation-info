@@ -15,6 +15,9 @@ data class VehicleSnapshot(
     val busTypeCode3: String?,
 )
 
+fun VehicleSnapshot.hasPlausibleDaeguPosition(): Boolean =
+    longitude in 128.0..129.2 && latitude in 35.3..36.3
+
 @ConsistentCopyVisibility
 data class VehicleBatch private constructor(val vehicles: List<VehicleSnapshot>, val fetchedAt: Instant) {
     companion object {

@@ -91,6 +91,22 @@ class RealtimeMapViewModelTest {
         fixture.viewModel.close()
     }
 
+    @Test fun `freshness ticker exposes delayed data age while keeping confirmed vehicles`() = runTest {
+        val fixture = fixture(testScheduler)
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+
+        fixture.clock.advanceSeconds(16)
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(DataFreshness.DELAYED, fixture.viewModel.uiState.value.freshness)
+        assertEquals(16L, fixture.viewModel.uiState.value.dataAgeSeconds)
+        assertEquals(1, fixture.viewModel.uiState.value.visibleVehicles.size)
+        fixture.viewModel.close()
+    }
+
     @Test fun `authentication failure stops future polls`() = runTest {
         val fixture = fixture(testScheduler, mutableListOf(VehicleLoadResult.Failure(BusDataError.InvalidCredential, null)))
         fixture.viewModel.setVisible(true)
@@ -101,6 +117,28 @@ class RealtimeMapViewModelTest {
         runCurrent()
 
         assertEquals(1, fixture.vehicles.calls)
+        fixture.viewModel.close()
+    }
+
+    @Test fun `quota failure remains stopped after background and resumes only on retry`() = runTest {
+        val fixture = fixture(
+            testScheduler,
+            mutableListOf(VehicleLoadResult.Failure(BusDataError.RateLimited, null)),
+        )
+        fixture.viewModel.setVisible(true)
+        fixture.viewModel.open(CommuteSlot.MORNING)
+        runCurrent()
+        assertEquals(1, fixture.vehicles.calls)
+
+        fixture.viewModel.setVisible(false)
+        fixture.viewModel.setVisible(true)
+        advanceTimeBy(120_000)
+        runCurrent()
+        assertEquals(1, fixture.vehicles.calls)
+
+        fixture.viewModel.retry()
+        runCurrent()
+        assertEquals(2, fixture.vehicles.calls)
         fixture.viewModel.close()
     }
 
