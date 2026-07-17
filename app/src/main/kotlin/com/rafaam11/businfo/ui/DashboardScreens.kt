@@ -141,9 +141,12 @@ private fun ConfiguredCommuteCard(
             else if (first == null) Text("현재 도착 예정 차량 없음", style = MaterialTheme.typography.headlineSmall)
             else {
                 Text(first.primaryText(), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Text(first.secondaryText(), style = MaterialTheme.typography.titleLarge)
+                first.secondaryText()?.let { Text(it, style = MaterialTheme.typography.titleLarge) }
             }
-            second?.let { Text("다음 차량 · ${it.primaryText()} · ${it.secondaryText()}") }
+            second?.let { estimate ->
+                val suffix = estimate.secondaryText()?.let { " · $it" }.orEmpty()
+                Text("다음 차량 · ${estimate.primaryText()}$suffix")
+            }
             Text(freshnessLabel(freshness, elapsed), color = freshnessColor(freshness), style = MaterialTheme.typography.labelLarge)
             card.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
@@ -157,7 +160,12 @@ fun KeyEntryScreen(state: AppUiState.NeedsKey, onSubmit: (String) -> Unit) {
     Scaffold(topBar = { TopAppBar(title = { Text(if (state.changeMode) "대구 버스 API 키 변경" else "대구 버스 API 연결") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("공공데이터 API 키 입력", style = MaterialTheme.typography.headlineSmall)
-            Text("data.go.kr에서 발급받은 일반 인증키를 입력하세요.")
+            Text("공공데이터포털(data.go.kr)에서 \"대구광역시_대구버스정보시스템\" 서비스를 활용신청하고, 승인 후 발급되는 일반 인증키의 Decoding 값을 입력하세요.")
+            Text(
+                "Encoding 값을 넣으면 키 확인에 실패합니다.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             state.error?.let { DashboardErrorBanner(it.userMessage()) }
             OutlinedTextField(
                 value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text("API 키") },

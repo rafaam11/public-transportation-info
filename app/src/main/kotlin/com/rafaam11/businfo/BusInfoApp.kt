@@ -40,6 +40,8 @@ fun BusInfoApp(
     realtimeMapViewModel: RealtimeMapViewModel,
     openMapSlot: CommuteSlot? = null,
     onOpenMapSlotConsumed: () -> Unit = {},
+    openSetupSlot: CommuteSlot? = null,
+    onOpenSetupSlotConsumed: () -> Unit = {},
     openKeySettings: Boolean = false,
     onOpenKeySettingsConsumed: () -> Unit = {},
     onInstallUpdate: (File) -> Unit = {},
@@ -74,6 +76,12 @@ fun BusInfoApp(
                     openMapSlot?.let { slot ->
                         nav.navigate("map/${slot.name}") { launchSingleTop = true }
                         onOpenMapSlotConsumed()
+                    }
+                }
+                LaunchedEffect(openSetupSlot) {
+                    openSetupSlot?.let { slot ->
+                        nav.navigate("setup/${slot.name}") { launchSingleTop = true }
+                        onOpenSetupSlotConsumed()
                     }
                 }
                 NavHost(navController = nav, startDestination = "dashboard") {

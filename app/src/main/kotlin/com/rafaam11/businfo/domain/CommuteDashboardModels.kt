@@ -46,14 +46,18 @@ data class ArrivalEstimate(
     val moveDirection: String = "",
 ) {
     fun primaryText(): String = when {
-        stopGap <= 0 -> "도착 임박"
+        stopGap < 0 -> state?.takeIf(String::isNotBlank) ?: "정보 없음"
+        stopGap == 0 -> "도착 임박"
         stopGap == 1 -> "1정거장 전"
         else -> "${stopGap}정거장 전"
     }
 
-    fun secondaryText(): String = state?.takeIf(String::isNotBlank) ?: when {
-        arrivalSeconds < 60 -> "곧 도착"
-        else -> "${ceil(arrivalSeconds / 60.0).toInt()}분"
+    fun secondaryText(): String? = when {
+        stopGap < 0 -> null
+        else -> state?.takeIf(String::isNotBlank) ?: when {
+            arrivalSeconds < 60 -> "곧 도착"
+            else -> "${ceil(arrivalSeconds / 60.0).toInt()}분"
+        }
     }
 }
 

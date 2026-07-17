@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val openMapSlot = MutableStateFlow<CommuteSlot?>(null)
+    private val openSetupSlot = MutableStateFlow<CommuteSlot?>(null)
     private val openKeySettings = MutableStateFlow(false)
     private val keySettingsRequests by lazy { KeySettingsRequestStore(applicationContext) }
 
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val mapSlot by openMapSlot.collectAsState()
+            val setupSlot by openSetupSlot.collectAsState()
             val keySettings by openKeySettings.collectAsState()
             BusInfoApp(
                 viewModel = busViewModel,
@@ -76,6 +78,11 @@ class MainActivity : ComponentActivity() {
                 onOpenMapSlotConsumed = {
                     intent.removeExtra(EXTRA_OPEN_MAP_SLOT)
                     openMapSlot.value = null
+                },
+                openSetupSlot = setupSlot,
+                onOpenSetupSlotConsumed = {
+                    intent.removeExtra(EXTRA_OPEN_SETUP_SLOT)
+                    openSetupSlot.value = null
                 },
                 openKeySettings = keySettings,
                 onOpenKeySettingsConsumed = {
@@ -96,10 +103,14 @@ class MainActivity : ComponentActivity() {
         openMapSlot.value = intent?.getStringExtra(EXTRA_OPEN_MAP_SLOT)?.let { name ->
             runCatching { CommuteSlot.valueOf(name) }.getOrNull()
         }
+        openSetupSlot.value = intent?.getStringExtra(EXTRA_OPEN_SETUP_SLOT)?.let { name ->
+            runCatching { CommuteSlot.valueOf(name) }.getOrNull()
+        }
         openKeySettings.value = keySettingsRequests.consume()
     }
 
     companion object {
         const val EXTRA_OPEN_MAP_SLOT = "com.rafaam11.businfo.extra.OPEN_MAP_SLOT"
+        const val EXTRA_OPEN_SETUP_SLOT = "com.rafaam11.businfo.extra.OPEN_SETUP_SLOT"
     }
 }

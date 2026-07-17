@@ -75,6 +75,19 @@ class CommuteWidgetRepositoryTest {
         assertEquals(now.minusSeconds(30), state.fetchedAt)
     }
 
+    @Test fun `sentinel arrival with negative stop gap surfaces service state without a misleading secondary text`() = runTest {
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        dashboard.snapshots.value = listOf(snapshot(
+            arrivals = listOf(ArrivalEstimate(-1, 100001, "운행종료")),
+            fetchedAt = now,
+        ))
+
+        val state = repository.state(WIDGET_ID, now)
+
+        assertEquals("운행종료", state.primaryText)
+        assertNull(state.secondaryText)
+    }
+
     @Test fun `missing slot requires configuration`() = runTest {
         val state = repository.state(WIDGET_ID, now)
 

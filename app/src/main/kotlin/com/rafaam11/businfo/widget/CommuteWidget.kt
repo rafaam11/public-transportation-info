@@ -81,11 +81,11 @@ private fun CompactCommuteWidgetContent(context: Context, state: CommuteWidgetUi
         }
         Spacer(GlanceModifier.height(3.dp))
         if (state.requiresConfiguration) {
-            Text("카드를 다시 설정해 주세요", style = TextStyle(color = textColor, fontSize = 11.sp))
+            Text("노선을 설정해 주세요", style = TextStyle(color = textColor, fontSize = 11.sp))
             Spacer(GlanceModifier.defaultWeight())
             Text(
                 "설정",
-                modifier = GlanceModifier.clickable(configurationAction(context, state.appWidgetId)),
+                modifier = GlanceModifier.clickable(configureOrSetupAction(context, state)),
                 style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 10.sp, fontWeight = FontWeight.Bold),
             )
             return@Column
@@ -145,11 +145,11 @@ private fun ExpandedCommuteWidgetContent(context: Context, state: CommuteWidgetU
         }
         Spacer(GlanceModifier.height(8.dp))
         if (state.requiresConfiguration) {
-            Text("카드를 다시 설정해 주세요", style = TextStyle(color = textColor, fontSize = 16.sp))
+            Text("노선을 설정해 주세요", style = TextStyle(color = textColor, fontSize = 16.sp))
             Spacer(GlanceModifier.defaultWeight())
             Text(
                 "설정",
-                modifier = GlanceModifier.clickable(configurationAction(context, state.appWidgetId)),
+                modifier = GlanceModifier.clickable(configureOrSetupAction(context, state)),
                 style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontWeight = FontWeight.Bold),
             )
             return@Column
@@ -217,6 +217,11 @@ private fun configurationAction(context: Context, appWidgetId: Int): Action = ac
         .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
 )
 
+private fun configureOrSetupAction(context: Context, state: CommuteWidgetUiState): Action =
+    state.slot?.let { slot ->
+        actionRunCallback<OpenCommuteSetupAction>(actionParametersOf(OpenCommuteSetupAction.slotKey to slot.name))
+    } ?: configurationAction(context, state.appWidgetId)
+
 private fun widgetAction(context: Context, state: CommuteWidgetUiState): Action =
     if (state.refreshError == BusDataError.InvalidCredential) {
         actionStartActivity(
@@ -249,10 +254,15 @@ private fun elapsedLabel(epochMillis: Long?, now: Instant): String {
 class RefreshCommuteWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
-        AppGraph.get(context).commuteWidgetRepository.refresh(appWidgetId) {
+        try {
+            AppGraph.get(context).commuteWidgetRepository.refresh(appWidgetId) {
+                CommuteWidget().update(context, glanceId)
+            }
+        } finally {
+            // Always re-render, even if refresh() threw — otherwise the widget stays stuck
+            // on the "새로고침 중…" frame drawn by onStarted() above.
             CommuteWidget().update(context, glanceId)
         }
-        CommuteWidget().update(context, glanceId)
     }
 }
 
@@ -263,6 +273,21 @@ class OpenCommuteMapAction : ActionCallback {
             Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 .putExtra(MainActivity.EXTRA_OPEN_MAP_SLOT, slot),
+        )
+    }
+
+    companion object {
+        val slotKey = ActionParameters.Key<String>("commute-slot")
+    }
+}
+
+class OpenCommuteSetupAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val slot = parameters[slotKey] ?: return
+        context.startActivity(
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN_SETUP_SLOT, slot),
         )
     }
 

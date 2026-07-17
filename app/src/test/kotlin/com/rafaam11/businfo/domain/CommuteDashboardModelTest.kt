@@ -1,6 +1,7 @@
 package com.rafaam11.businfo.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CommuteDashboardModelTest {
@@ -36,5 +37,13 @@ class CommuteDashboardModelTest {
         assertEquals("9분", ArrivalEstimate(7, 487, "9분").secondaryText())
         assertEquals("곧 도착", ArrivalEstimate(0, 59, null).secondaryText())
         assertEquals("2분", ArrivalEstimate(2, 61, null).secondaryText())
+    }
+
+    @Test
+    fun `negative stop gap is treated as a sentinel rather than an imminent arrival`() {
+        assertEquals("운행종료", ArrivalEstimate(-1, 100001, "운행종료").primaryText())
+        assertEquals("정보 없음", ArrivalEstimate(-1, 100001, null).primaryText())
+        assertNull(ArrivalEstimate(-1, 100001, "운행종료").secondaryText())
+        assertNull(ArrivalEstimate(-1, 100001, null).secondaryText())
     }
 }

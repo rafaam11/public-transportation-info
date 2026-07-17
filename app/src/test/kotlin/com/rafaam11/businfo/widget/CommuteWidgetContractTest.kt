@@ -98,8 +98,25 @@ class CommuteWidgetContractTest {
         assertTrue(widget.contains("API 키 변경"))
         assertTrue(widget.contains("Intent(context, WidgetKeySettingsActivity::class.java)"))
         assertFalse(widget.contains("EXTRA_OPEN_KEY_SETTINGS"))
-        assertTrue(widget.contains("카드를 다시 설정해 주세요"))
+        assertTrue(widget.contains("노선을 설정해 주세요"))
         assertTrue(notifier.contains("CommuteWidget().updateAll(applicationContext)"))
         assertTrue(receiver.contains("appWidgetIds.forEach(repository::clear)"))
+    }
+
+    @Test
+    fun requiresConfigurationRoutesToRealSetupScreenWhenSlotIsAlreadyKnown() {
+        val widget = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidget.kt").readText()
+        val activity = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/MainActivity.kt").readText()
+        val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
+
+        // The "설정" button must not just reopen the MORNING/EVENING picker when a slot is
+        // already assigned — that loop never lets a user without a favorite configure a route.
+        assertTrue(widget.contains("class OpenCommuteSetupAction"))
+        assertTrue(widget.contains("MainActivity.EXTRA_OPEN_SETUP_SLOT"))
+        assertTrue(widget.contains("configureOrSetupAction(context, state)"))
+        assertTrue(activity.contains("EXTRA_OPEN_SETUP_SLOT"))
+        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_SETUP_SLOT)"))
+        assertTrue(app.contains("nav.navigate(\"setup/${'$'}{slot.name}\")"))
+        assertTrue(app.contains("onOpenSetupSlotConsumed"))
     }
 }
