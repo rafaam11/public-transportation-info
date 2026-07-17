@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 820" width="400" height="820" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-label="대시보드 화면 (와이어프레임 목업)">
+  <rect width="400" height="820" rx="32" fill="#f4f7f2" stroke="#d8ded4"/>
+
+  <!-- status bar -->
+  <text x="24" y="34" font-size="14" font-weight="600" fill="#17212b">9:41</text>
+
+  <!-- top app bar -->
+  <text x="24" y="94" font-size="22" font-weight="700" fill="#17212b">내 버스</text>
+  <text x="376" y="78" font-size="12.5" fill="#005bac" text-anchor="end">업데이트 확인</text>
+  <text x="376" y="100" font-size="12.5" fill="#005bac" text-anchor="end">API 키 변경</text>
+  <line x1="0" y1="116" x2="400" y2="116" stroke="#e3e8de"/>
+
+  <!-- update banner -->
+  <rect x="20" y="136" width="360" height="92" rx="16" fill="#e4eef7"/>
+  <text x="36" y="168" font-size="15" font-weight="700" fill="#17212b">새 버전 v0.6.0이 있습니다</text>
+  <rect x="36" y="182" width="104" height="34" rx="17" fill="#005bac"/>
+  <text x="88" y="204" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">다운로드</text>
+
+  <!-- 출근 card -->
+  <rect x="20" y="248" width="360" height="192" rx="20" fill="#ffffff" stroke="#e3e8de"/>
+  <text x="36" y="282" font-size="18" font-weight="700" fill="#17212b">출근</text>
+  <text x="364" y="282" font-size="13" fill="#005bac" text-anchor="end">편집</text>
+  <text x="36" y="310" font-size="14" fill="#005bac">814번 · 대구대 방면</text>
+  <text x="36" y="334" font-size="16" fill="#17212b">범물동</text>
+  <text x="36" y="376" font-size="34" font-weight="700" fill="#17212b">3분</text>
+  <text x="96" y="376" font-size="16" fill="#17212b">후 도착</text>
+  <text x="36" y="402" font-size="13" fill="#5b6570">다음 차량 · 12분 후</text>
+  <text x="36" y="426" font-size="13" fill="#005bac">최신 · 5초 전</text>
+
+  <!-- 퇴근 card -->
+  <rect x="20" y="456" width="360" height="192" rx="20" fill="#ffffff" stroke="#e3e8de"/>
+  <text x="36" y="490" font-size="18" font-weight="700" fill="#17212b">퇴근</text>
+  <text x="364" y="490" font-size="13" fill="#005bac" text-anchor="end">편집</text>
+  <text x="36" y="518" font-size="14" fill="#ff4917">급행8-1 · 유곡리 방면</text>
+  <text x="36" y="542" font-size="16" fill="#17212b">검단동</text>
+  <text x="36" y="584" font-size="34" font-weight="700" fill="#17212b">12분</text>
+  <text x="112" y="584" font-size="16" fill="#17212b">후 도착</text>
+  <text x="36" y="610" font-size="13" fill="#5b6570">다음 차량 · 27분 후</text>
+  <text x="36" y="634" font-size="13" fill="#a86000">지연 · 41초 전</text>
+
+  <!-- refresh button -->
+  <rect x="20" y="680" width="360" height="52" rx="16" fill="#005bac"/>
+  <text x="200" y="712" font-size="16" font-weight="600" fill="#ffffff" text-anchor="middle">전체 새로고침</text>
+
+  <!-- home indicator -->
+  <rect x="160" y="798" width="80" height="5" rx="2.5" fill="#c7ccc3"/>
+</svg>

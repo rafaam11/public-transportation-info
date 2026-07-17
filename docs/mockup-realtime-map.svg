@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 820" width="400" height="820" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-label="실시간 버스 지도 화면 (와이어프레임 목업)">
+  <rect width="400" height="820" rx="32" fill="#f4f7f2" stroke="#d8ded4"/>
+
+  <!-- top bar -->
+  <text x="24" y="54" font-size="26" font-weight="700" fill="#17212b">‹</text>
+  <text x="56" y="50" font-size="17" font-weight="700" fill="#17212b">814번</text>
+  <text x="56" y="72" font-size="12" fill="#5b6570">대구대 방면</text>
+  <text x="376" y="54" font-size="13" fill="#005bac" text-anchor="end">노선 전체 보기</text>
+  <line x1="0" y1="90" x2="400" y2="90" stroke="#e3e8de"/>
+
+  <!-- map area -->
+  <rect x="0" y="90" width="400" height="470" fill="#dce7da"/>
+  <path d="M60,540 C120,480 100,380 180,340 C260,300 260,220 340,160" fill="none" stroke="#ff4917" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="60" cy="540" r="5" fill="#ffffff" stroke="#ff4917" stroke-width="2"/>
+  <circle cx="180" cy="340" r="5" fill="#ffffff" stroke="#ff4917" stroke-width="2"/>
+  <circle cx="340" cy="160" r="5" fill="#ffffff" stroke="#ff4917" stroke-width="2"/>
+
+  <!-- selected vehicle marker -->
+  <g transform="translate(140,404)">
+    <circle r="16" fill="#ff4917" opacity="0.18"/>
+    <rect x="-11" y="-7" width="22" height="14" rx="4" fill="#ff4917" transform="rotate(35)"/>
+  </g>
+  <rect x="164" y="376" width="150" height="50" rx="10" fill="#ffffff" stroke="#e3e8de"/>
+  <text x="178" y="396" font-size="12" font-weight="700" fill="#17212b">3정류장 전</text>
+  <text x="178" y="414" font-size="10.5" fill="#005bac">GPS 2초 전</text>
+
+  <!-- stale vehicle marker (15s+, faded) -->
+  <g transform="translate(300,198)" opacity="0.45">
+    <rect x="-11" y="-7" width="22" height="14" rx="4" fill="#ff4917" transform="rotate(-20)"/>
+  </g>
+
+  <!-- bottom sheet -->
+  <rect x="0" y="560" width="400" height="260" rx="24" fill="#ffffff" stroke="#e3e8de"/>
+  <rect x="180" y="576" width="40" height="5" rx="2.5" fill="#d8ded4"/>
+  <text x="32" y="610" font-size="15" font-weight="700" fill="#17212b">전체 운행 6대 · 초정밀 위치 4대</text>
+  <line x1="20" y1="624" x2="380" y2="624" stroke="#e3e8de"/>
+
+  <circle cx="32" cy="650" r="6" fill="#ff4917"/>
+  <text x="48" y="655" font-size="12.5" fill="#17212b">814-가1 · 대구대 방면 · 3정류장 전</text>
+  <text x="48" y="672" font-size="11" fill="#005bac">GPS 2초 전</text>
+
+  <circle cx="32" cy="700" r="6" fill="#ff4917" opacity="0.45"/>
+  <text x="48" y="705" font-size="12.5" fill="#17212b" opacity="0.6">814-나2 · 대구대 방면 · 7정류장 전</text>
+  <text x="48" y="722" font-size="11" fill="#a86000">GPS 18초 전 · 지연</text>
+
+  <circle cx="32" cy="750" r="6" fill="#9aa3b2"/>
+  <text x="48" y="755" font-size="12" fill="#5b6570">814-다3 · 공개 API만 · 초정밀 위치 없음</text>
+</svg>
