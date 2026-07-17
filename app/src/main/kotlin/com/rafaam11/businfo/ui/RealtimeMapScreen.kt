@@ -4,9 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
@@ -46,11 +50,14 @@ fun RealtimeMapScreen(
         (String) -> Unit,
     ) -> Unit,
 ) {
+    val navigationBarInset = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
     )
     BottomSheetScaffold(
-        sheetPeekHeight = 132.dp,
+        sheetPeekHeight = 204.dp + navigationBarInset,
         sheetContent = {
             RealtimeMapSheet(
                 state = state,
@@ -117,6 +124,7 @@ private fun RealtimeMapSheet(
     Column(
         Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(16.dp)
             .testTag(REALTIME_MAP_SHEET_TAG),
         verticalArrangement = Arrangement.spacedBy(8.dp),
