@@ -29,9 +29,11 @@ class CommuteWidgetContractTest {
             "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetConfigurationActivity.kt",
         ).readText()
 
-        assertTrue(configuration.contains("getAppWidgetInfo(appWidgetId)?.provider"))
+        assertTrue(configuration.contains("getAppWidgetInfo(id)?.provider"))
         assertTrue(configuration.contains("ComponentName(this, CommuteWidgetReceiver::class.java)"))
         assertTrue(configuration.contains("setResult(Activity.RESULT_CANCELED)"))
+        assertTrue(configuration.contains("if (!ownership.isOwned())"))
+        assertTrue(configuration.contains("if (!ownership.runIfOwned { persistChoice(slot) })"))
     }
 
     @Test

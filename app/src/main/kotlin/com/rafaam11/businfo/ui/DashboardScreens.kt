@@ -55,14 +55,14 @@ fun DashboardScreen(
     onOpen: (CommuteSlot) -> Unit,
     onEdit: (CommuteSlot) -> Unit,
     onRefresh: () -> Unit,
-    onClearKey: () -> Unit,
+    onChangeKey: () -> Unit,
     catalogPreparing: Boolean = false,
     catalogError: String? = null,
     onRetryCatalog: () -> Unit = {},
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("내 버스", fontWeight = FontWeight.Bold) }, actions = {
-            TextButton(onClick = onClearKey) { Text("API 키 변경") }
+            TextButton(onClick = onChangeKey) { Text("API 키 변경") }
         }) },
     ) { padding ->
         LazyColumn(

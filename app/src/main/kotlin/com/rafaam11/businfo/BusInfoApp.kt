@@ -81,7 +81,7 @@ fun BusInfoApp(
                             onOpen = { nav.navigate("map/${it.name}") },
                             onEdit = { nav.navigate("setup/${it.name}") },
                             onRefresh = viewModel::refreshAll,
-                            onClearKey = viewModel::clearKey,
+                            onChangeKey = viewModel::beginKeyChange,
                             catalogPreparing = current.catalogPreparing,
                             catalogError = current.catalogError?.userMessage(),
                             onRetryCatalog = viewModel::retryCatalog,

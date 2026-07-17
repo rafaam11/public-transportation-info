@@ -2,8 +2,8 @@ package com.rafaam11.businfo.widget
 
 import android.app.Activity
 import android.appwidget.AppWidgetManager
-import android.content.Intent
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 
 class CommuteWidgetConfigurationActivity : ComponentActivity() {
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private lateinit var ownership: WidgetOwnershipGuard
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,11 +36,8 @@ class CommuteWidgetConfigurationActivity : ComponentActivity() {
             AppWidgetManager.EXTRA_APPWIDGET_ID,
             AppWidgetManager.INVALID_APPWIDGET_ID,
         )
-        val owner = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)?.provider
-        if (
-            appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID ||
-            owner != ComponentName(this, CommuteWidgetReceiver::class.java)
-        ) {
+        ownership = WidgetOwnershipGuard(appWidgetId, ::isOwnedWidgetId)
+        if (!ownership.isOwned()) {
             finish()
             return
         }
@@ -47,6 +45,10 @@ class CommuteWidgetConfigurationActivity : ComponentActivity() {
     }
 
     private fun choose(slot: CommuteSlot) {
+        if (!ownership.runIfOwned { persistChoice(slot) }) finish()
+    }
+
+    private fun persistChoice(slot: CommuteSlot) {
         AppGraph.get(applicationContext).widgetPreferences.saveSlot(appWidgetId, slot)
         lifecycleScope.launch {
             val glanceId = GlanceAppWidgetManager(applicationContext).getGlanceIdBy(appWidgetId)
@@ -57,6 +59,24 @@ class CommuteWidgetConfigurationActivity : ComponentActivity() {
             )
             finish()
         }
+    }
+
+    private fun isOwnedWidgetId(id: Int): Boolean =
+        id != AppWidgetManager.INVALID_APPWIDGET_ID &&
+            AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider ==
+            ComponentName(this, CommuteWidgetReceiver::class.java)
+}
+
+internal class WidgetOwnershipGuard(
+    private val appWidgetId: Int,
+    private val isOwnedWidgetId: (Int) -> Boolean,
+) {
+    fun isOwned(): Boolean = isOwnedWidgetId(appWidgetId)
+
+    fun runIfOwned(action: () -> Unit): Boolean {
+        if (!isOwned()) return false
+        action()
+        return true
     }
 }
 

@@ -22,7 +22,7 @@ class DashboardScreenTest {
             MaterialTheme {
                 DashboardScreen(
                     cards = listOf(DashboardCardUiState.Empty(CommuteSlot.MORNING), DashboardCardUiState.Empty(CommuteSlot.EVENING)),
-                    onAdd = {}, onOpen = {}, onEdit = {}, onRefresh = {}, onClearKey = {},
+                    onAdd = {}, onOpen = {}, onEdit = {}, onRefresh = {}, onChangeKey = {},
                 )
             }
         }

@@ -50,7 +50,7 @@ class BusAppViewModelTest {
         assertTrue(credential.hasKey)
     }
 
-    @Test fun `failed replacement validation preserves old key`() = runTest {
+    @Test fun `dashboard triggered replacement failure never clears old key`() = runTest {
         val credential = FakeCredential(true, validationError = BusDataError.InvalidCredential)
         val viewModel = BusAppViewModel(credential, FakeDashboard(), StandardTestDispatcher(testScheduler))
         advanceUntilIdle()
