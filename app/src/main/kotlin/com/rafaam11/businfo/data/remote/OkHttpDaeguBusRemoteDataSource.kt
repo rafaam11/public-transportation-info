@@ -9,6 +9,8 @@ import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.ArrivalEstimate
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.RouteLink
+import com.rafaam11.businfo.domain.RouteNode
 import com.rafaam11.businfo.domain.VehicleSnapshot
 import java.io.IOException
 import java.time.Clock
@@ -57,6 +59,18 @@ class OkHttpDaeguBusRemoteDataSource(
     override suspend fun routeStops(serviceKey: String, routeId: String): RemoteResult<List<RouteStop>> =
         when (val result = request("getBs02", serviceKey, mapOf("routeId" to routeId))) {
             is RemoteResult.Success -> parseRouteStops(routeId, result.value)
+            is RemoteResult.Failure -> result
+        }
+
+    override suspend fun basicNodes(serviceKey: String): RemoteResult<List<RouteNode>> =
+        when (val result = request("getBasic02", serviceKey, emptyMap())) {
+            is RemoteResult.Success -> parseBasicNodes(result.value)
+            is RemoteResult.Failure -> result
+        }
+
+    override suspend fun routeLinks(serviceKey: String, routeId: String): RemoteResult<List<RouteLink>> =
+        when (val result = request("getLink02", serviceKey, mapOf("routeId" to routeId))) {
+            is RemoteResult.Success -> parseRouteLinks(routeId, result.value)
             is RemoteResult.Failure -> result
         }
 
@@ -165,6 +179,46 @@ class OkHttpDaeguBusRemoteDataSource(
         return if (items.asJsonArray.size() > 0 && stops.isEmpty()) {
             RemoteResult.Failure(BusDataError.MalformedResponse)
         } else RemoteResult.Success(stops.sortedWith(compareBy(RouteStop::moveDirection, RouteStop::sequence)))
+    }
+
+    private fun parseBasicNodes(items: JsonElement): RemoteResult<List<RouteNode>> {
+        val array = items.takeIf(JsonElement::isJsonObject)?.asJsonObject
+            ?.get("node")?.takeIf(JsonElement::isJsonArray)?.asJsonArray
+            ?: return RemoteResult.Failure(BusDataError.MalformedResponse)
+        val nodes = array.mapNotNull { element ->
+            val item = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+            RouteNode(
+                nodeId = item.string("nodeId")?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
+                longitude = item.double("xPos") ?: return@mapNotNull null,
+                latitude = item.double("yPos") ?: return@mapNotNull null,
+            )
+        }
+        return if (array.size() > 0 && nodes.isEmpty()) {
+            RemoteResult.Failure(BusDataError.MalformedResponse)
+        } else {
+            RemoteResult.Success(nodes)
+        }
+    }
+
+    private fun parseRouteLinks(routeId: String, items: JsonElement): RemoteResult<List<RouteLink>> {
+        if (!items.isJsonArray) return RemoteResult.Failure(BusDataError.MalformedResponse)
+        val array = items.asJsonArray
+        val links = array.mapNotNull { element ->
+            val item = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+            RouteLink(
+                routeId = routeId,
+                linkId = item.string("linkId")?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
+                moveDirection = item.string("moveDir")?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
+                sequence = item.int("linkSeq") ?: return@mapNotNull null,
+                startNodeId = item.string("stNode")?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
+                endNodeId = item.string("edNode")?.takeIf(String::isNotBlank) ?: return@mapNotNull null,
+            )
+        }
+        return if (array.size() > 0 && links.isEmpty()) {
+            RemoteResult.Failure(BusDataError.MalformedResponse)
+        } else {
+            RemoteResult.Success(links.sortedWith(compareBy(RouteLink::moveDirection, RouteLink::sequence)))
+        }
     }
 
     private fun parseArrivals(routeNo: String, items: JsonElement): RemoteResult<List<ArrivalEstimate>> {

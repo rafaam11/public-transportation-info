@@ -1,6 +1,8 @@
 package com.rafaam11.businfo.data.remote
 
 import com.rafaam11.businfo.domain.BusDataError
+import com.rafaam11.businfo.domain.RouteLink
+import com.rafaam11.businfo.domain.RouteNode
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -109,6 +111,41 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals("0", stop.moveDirection)
         assertEquals(12, stop.sequence)
         assertEquals("3000814001", server.takeRequest().requestUrl!!.queryParameter("routeId"))
+    }
+
+    @Test fun basicNodesParseCoordinatesWithoutRetainingUnrelatedFields() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope("""{"route":[],"bs":[],"node":[
+          {"nodeId":"n1","nodeNm":"교차로","xPos":128.61,"yPos":35.81,"bsYn":"N"}
+        ],"link":[]}""")))
+
+        val result = source.basicNodes("secret") as RemoteResult.Success
+
+        assertEquals(listOf(RouteNode("n1", 128.61, 35.81)), result.value)
+        assertEquals("/getBasic02", server.takeRequest().requestUrl!!.encodedPath)
+    }
+
+    @Test fun routeLinksParseDirectionSequenceAndEndpoints() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope("""[
+          {"linkId":"l2","stNode":"n2","edNode":"n3","gisDist":100,"moveDir":"0","linkSeq":2},
+          {"linkId":"l1","stNode":"n1","edNode":"n2","gisDist":80,"moveDir":"0","linkSeq":1}
+        ]""")))
+
+        val result = source.routeLinks("secret", "route") as RemoteResult.Success
+
+        assertEquals(listOf("l1", "l2"), result.value.map(RouteLink::linkId))
+        val requestUrl = server.takeRequest().requestUrl!!
+        assertEquals("/getLink02", requestUrl.encodedPath)
+        assertEquals("route", requestUrl.queryParameter("routeId"))
+    }
+
+    @Test fun nonemptyMalformedNodeAndLinkArraysFailTheContract() = runTest {
+        server.enqueue(MockResponse().setBody(successEnvelope(
+            """{"route":[],"bs":[],"node":[{"nodeId":"n1"}],"link":[]}""",
+        )))
+        assertEquals(RemoteResult.Failure(BusDataError.MalformedResponse), source.basicNodes("secret"))
+
+        server.enqueue(MockResponse().setBody(successEnvelope("""[{"linkId":"l1","moveDir":"0"}]""")))
+        assertEquals(RemoteResult.Failure(BusDataError.MalformedResponse), source.routeLinks("secret", "route"))
     }
 
     @Test fun realtimeResponseFiltersRequestedRouteAndSortsByArrivalTime() = runTest {
