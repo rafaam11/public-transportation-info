@@ -194,6 +194,42 @@ class CommuteWidgetRepositoryTest {
         assertEquals(2, dashboard.refreshedSlots.size)
     }
 
+    @Test fun `deletion during startup invalidates old lease without duplicating recreated refresh`() = runTest {
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        dashboard.refreshGate = CompletableDeferred()
+        val oldStartupEntered = CompletableDeferred<Unit>()
+        val releaseOldStartup = CompletableDeferred<Unit>()
+        var startupCount = 0
+        val lifecycleRepository = CommuteWidgetRepository(
+            dashboard,
+            preferences,
+            Clock.fixed(now, ZoneOffset.UTC),
+            beforeRefreshStartup = {
+                startupCount++
+                if (startupCount == 1) {
+                    oldStartupEntered.complete(Unit)
+                    releaseOldStartup.await()
+                }
+            },
+        )
+        val oldRefresh = async { lifecycleRepository.refresh(WIDGET_ID) }
+        oldStartupEntered.await()
+
+        lifecycleRepository.clear(WIDGET_ID)
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        val newStarted = CompletableDeferred<Unit>()
+        val newRefresh = async { lifecycleRepository.refresh(WIDGET_ID) { newStarted.complete(Unit) } }
+        newStarted.await()
+        releaseOldStartup.complete(Unit)
+
+        assertEquals(WidgetRefreshResult.RequiresConfiguration, oldRefresh.await())
+        assertEquals(1, dashboard.refreshedSlots.size)
+        dashboard.refreshGate!!.complete(Unit)
+        assertEquals(WidgetRefreshResult.Success, newRefresh.await())
+        assertNull(preferences.errorState(WIDGET_ID))
+        assertFalse(lifecycleRepository.state(WIDGET_ID, now).isRefreshing)
+    }
+
     private fun snapshot(arrivals: List<ArrivalEstimate>, fetchedAt: Instant?) =
         FavoriteDashboardSnapshot(favorite, arrivals, fetchedAt)
 
