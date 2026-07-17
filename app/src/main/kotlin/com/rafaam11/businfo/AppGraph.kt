@@ -33,7 +33,7 @@ class AppGraph private constructor(context: Context) {
         .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
     private val local = RoomBusLocalDataSource(database.dao())
-    private val widgetPreferences = WidgetPreferenceStore(context.applicationContext)
+    val widgetPreferences = WidgetPreferenceStore(context.applicationContext)
 
     val credentialRepository = BusRepository(credentials, remote)
     val dashboardRepository = DashboardRepository(

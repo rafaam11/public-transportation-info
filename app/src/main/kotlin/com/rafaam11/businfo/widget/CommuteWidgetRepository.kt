@@ -82,4 +82,10 @@ class CommuteWidgetRepository(
             mutex.unlock()
         }
     }
+
+    fun clear(appWidgetId: Int) {
+        preferences.clear(appWidgetId)
+        refreshingIds -= appWidgetId
+        refreshMutexes.remove(appWidgetId)
+    }
 }

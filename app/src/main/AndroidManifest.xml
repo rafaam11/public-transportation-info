@@ -24,5 +24,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".widget.CommuteWidgetConfigurationActivity"
+            android:exported="true" />
+        <receiver
+            android:name=".widget.CommuteWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/commute_widget_info" />
+        </receiver>
     </application>
 </manifest>

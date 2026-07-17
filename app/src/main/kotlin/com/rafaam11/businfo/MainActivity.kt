@@ -1,18 +1,27 @@
 package com.rafaam11.businfo
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.naver.maps.map.NaverMapSdk
 import com.rafaam11.businfo.ui.BusAppViewModel
 import com.rafaam11.businfo.ui.RealtimeMapViewModel
+import com.rafaam11.businfo.domain.CommuteSlot
 import java.time.Clock
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
+    private val openMapSlot = MutableStateFlow<CommuteSlot?>(null)
+    private val openKeySettings = MutableStateFlow(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        readNavigationExtras(intent)
         val graph = AppGraph.get(applicationContext)
         NaverMapSdk.getInstance(applicationContext).setOnAuthFailedListener { exception ->
             graph.mapAuthMonitor.report(exception.errorCode)
@@ -39,6 +48,35 @@ class MainActivity : ComponentActivity() {
         val busViewModel = provider[BusAppViewModel::class.java]
         val realtimeMapViewModel = provider[RealtimeMapViewModel::class.java]
 
-        setContent { BusInfoApp(busViewModel, realtimeMapViewModel) }
+        setContent {
+            val mapSlot by openMapSlot.collectAsState()
+            val keySettings by openKeySettings.collectAsState()
+            BusInfoApp(
+                viewModel = busViewModel,
+                realtimeMapViewModel = realtimeMapViewModel,
+                openMapSlot = mapSlot,
+                onOpenMapSlotConsumed = { openMapSlot.value = null },
+                openKeySettings = keySettings,
+                onOpenKeySettingsConsumed = { openKeySettings.value = false },
+            )
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readNavigationExtras(intent)
+    }
+
+    private fun readNavigationExtras(intent: Intent?) {
+        openMapSlot.value = intent?.getStringExtra(EXTRA_OPEN_MAP_SLOT)?.let { name ->
+            runCatching { CommuteSlot.valueOf(name) }.getOrNull()
+        }
+        openKeySettings.value = intent?.getBooleanExtra(EXTRA_OPEN_KEY_SETTINGS, false) == true
+    }
+
+    companion object {
+        const val EXTRA_OPEN_MAP_SLOT = "com.rafaam11.businfo.extra.OPEN_MAP_SLOT"
+        const val EXTRA_OPEN_KEY_SETTINGS = "com.rafaam11.businfo.extra.OPEN_KEY_SETTINGS"
     }
 }

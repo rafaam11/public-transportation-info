@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="commute_widget_description">출퇴근 버스 도착 정보</string>
+    <string name="commute_widget_configure_title">표시할 시간대를 선택하세요</string>
+</resources>

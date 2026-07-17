@@ -37,10 +37,20 @@ import com.rafaam11.businfo.ui.userMessage
 fun BusInfoApp(
     viewModel: BusAppViewModel,
     realtimeMapViewModel: RealtimeMapViewModel,
+    openMapSlot: CommuteSlot? = null,
+    onOpenMapSlotConsumed: () -> Unit = {},
+    openKeySettings: Boolean = false,
+    onOpenKeySettingsConsumed: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val setup by viewModel.setupState.collectAsState()
     val realtimeState by realtimeMapViewModel.uiState.collectAsState()
+    LaunchedEffect(openKeySettings) {
+        if (openKeySettings) {
+            viewModel.clearKey()
+            onOpenKeySettingsConsumed()
+        }
+    }
     val colors = lightColorScheme(
         primary = Color(0xFF005BAC),
         onPrimary = Color(0xFFF4F7F2),
@@ -57,6 +67,12 @@ fun BusInfoApp(
             is AppUiState.NeedsKey -> KeyEntryScreen(current, viewModel::submitKey)
             is AppUiState.Ready -> {
                 val nav = rememberNavController()
+                LaunchedEffect(openMapSlot) {
+                    openMapSlot?.let { slot ->
+                        nav.navigate("map/${slot.name}") { launchSingleTop = true }
+                        onOpenMapSlotConsumed()
+                    }
+                }
                 NavHost(navController = nav, startDestination = "dashboard") {
                     composable("dashboard") {
                         DashboardScreen(

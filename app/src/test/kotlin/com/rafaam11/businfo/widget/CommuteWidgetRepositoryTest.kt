@@ -161,6 +161,18 @@ class CommuteWidgetRepositoryTest {
         assertFalse(repository.state(WIDGET_ID, now).isRefreshing)
     }
 
+    @Test fun `clear removes widget preferences and process state`() = runTest {
+        preferences.saveSlot(WIDGET_ID, CommuteSlot.MORNING)
+        preferences.saveError(WIDGET_ID, BusDataError.ServiceUnavailable, now.toEpochMilli())
+
+        repository.clear(WIDGET_ID)
+
+        assertNull(preferences.slot(WIDGET_ID))
+        assertNull(preferences.errorState(WIDGET_ID))
+        assertTrue(repository.state(WIDGET_ID, now).requiresConfiguration)
+        assertFalse(repository.state(WIDGET_ID, now).isRefreshing)
+    }
+
     private fun snapshot(arrivals: List<ArrivalEstimate>, fetchedAt: Instant?) =
         FavoriteDashboardSnapshot(favorite, arrivals, fetchedAt)
 
