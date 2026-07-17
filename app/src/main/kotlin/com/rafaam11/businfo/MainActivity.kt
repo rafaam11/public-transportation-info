@@ -13,6 +13,7 @@ import com.rafaam11.businfo.ui.BusAppViewModel
 import com.rafaam11.businfo.ui.RealtimeMapViewModel
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.widget.KeySettingsRequestStore
+import java.io.File
 import java.time.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -32,7 +33,12 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
                 modelClass.isAssignableFrom(BusAppViewModel::class.java) -> {
-                    BusAppViewModel(graph.credentialRepository, graph.dashboardRepository) as T
+                    BusAppViewModel(
+                        graph.credentialRepository,
+                        graph.dashboardRepository,
+                        graph.updateRepository,
+                        graph.updateDownloader,
+                    ) as T
                 }
                 modelClass.isAssignableFrom(RealtimeMapViewModel::class.java) -> {
                     RealtimeMapViewModel(
@@ -51,6 +57,15 @@ class MainActivity : ComponentActivity() {
         val busViewModel = provider[BusAppViewModel::class.java]
         val realtimeMapViewModel = provider[RealtimeMapViewModel::class.java]
 
+        val onInstallUpdate: (File) -> Unit = { file ->
+            val intent = if (graph.updateInstaller.canRequestInstall()) {
+                graph.updateInstaller.installIntent(file)
+            } else {
+                graph.updateInstaller.manageUnknownAppSourcesIntent()
+            }
+            startActivity(intent)
+        }
+
         setContent {
             val mapSlot by openMapSlot.collectAsState()
             val keySettings by openKeySettings.collectAsState()
@@ -66,6 +81,7 @@ class MainActivity : ComponentActivity() {
                 onOpenKeySettingsConsumed = {
                     openKeySettings.value = false
                 },
+                onInstallUpdate = onInstallUpdate,
             )
         }
     }

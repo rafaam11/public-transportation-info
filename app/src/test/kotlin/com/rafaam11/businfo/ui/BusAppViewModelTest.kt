@@ -3,12 +3,18 @@ package com.rafaam11.businfo.ui
 import com.rafaam11.businfo.data.CredentialGateway
 import com.rafaam11.businfo.data.DashboardDataSource
 import com.rafaam11.businfo.data.DirectionOption
+import com.rafaam11.businfo.data.DownloadOutcome
+import com.rafaam11.businfo.data.UpdateDownloader
+import com.rafaam11.businfo.data.UpdateRepository
+import com.rafaam11.businfo.domain.AppUpdateInfo
+import com.rafaam11.businfo.domain.AppVersion
 import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.UpdateCheckOutcome
 import com.rafaam11.businfo.domain.VehicleLoadResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -23,7 +29,10 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class BusAppViewModelTest {
     @Test fun `missing key starts at key entry`() = runTest {
-        val viewModel = BusAppViewModel(FakeCredential(false), FakeDashboard(), StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            FakeCredential(false), FakeDashboard(), FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value is AppUiState.NeedsKey)
@@ -31,7 +40,10 @@ class BusAppViewModelTest {
 
     @Test fun `saved key opens dashboard and refreshes both slots once`() = runTest {
         val dashboard = FakeDashboard()
-        val viewModel = BusAppViewModel(FakeCredential(true), dashboard, StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), dashboard, FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
         advanceUntilIdle()
 
         val ready = viewModel.uiState.value as AppUiState.Ready
@@ -41,7 +53,10 @@ class BusAppViewModelTest {
 
     @Test fun `valid submitted key opens dashboard`() = runTest {
         val credential = FakeCredential(false)
-        val viewModel = BusAppViewModel(credential, FakeDashboard(), StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            credential, FakeDashboard(), FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
 
         viewModel.submitKey("key")
         advanceUntilIdle()
@@ -52,7 +67,10 @@ class BusAppViewModelTest {
 
     @Test fun `dashboard triggered replacement failure never clears old key`() = runTest {
         val credential = FakeCredential(true, validationError = BusDataError.InvalidCredential)
-        val viewModel = BusAppViewModel(credential, FakeDashboard(), StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            credential, FakeDashboard(), FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
         advanceUntilIdle()
 
         viewModel.beginKeyChange()
@@ -68,7 +86,10 @@ class BusAppViewModelTest {
 
     @Test fun `catalog retry forces a new basic sync`() = runTest {
         val dashboard = FakeDashboard()
-        val viewModel = BusAppViewModel(FakeCredential(true), dashboard, StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), dashboard, FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
         advanceUntilIdle()
 
         viewModel.retryCatalog()
@@ -79,7 +100,10 @@ class BusAppViewModelTest {
 
     @Test fun `saving a stop copies the official route type to the favorite`() = runTest {
         val dashboard = FakeDashboard()
-        val viewModel = BusAppViewModel(FakeCredential(true), dashboard, StandardTestDispatcher(testScheduler))
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), dashboard, FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
         advanceUntilIdle()
         viewModel.openSetup(CommuteSlot.MORNING)
         advanceUntilIdle()
@@ -91,6 +115,54 @@ class BusAppViewModelTest {
         advanceUntilIdle()
 
         assertEquals("1", dashboard.savedFavorite?.routeTypeCode)
+    }
+
+    @Test fun `startup checks for updates exactly once`() = runTest {
+        val updates = FakeUpdateRepository()
+        val info = AppUpdateInfo(AppVersion(0, 6, 0), "v0.6.0", "https://example/app.apk", "https://example/releases/v0.6.0", "app.apk")
+        updates.outcome = UpdateCheckOutcome.UpdateAvailable(info)
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), FakeDashboard(), updates, FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, updates.checkCalls)
+        val state = viewModel.updateState.value as UpdateUiState.Available
+        assertEquals(info, state.info)
+    }
+
+    @Test fun `manual recheck reuses the same trigger`() = runTest {
+        val updates = FakeUpdateRepository()
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), FakeDashboard(), updates, FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+
+        viewModel.checkForUpdatesOnce()
+        advanceUntilIdle()
+
+        assertEquals(2, updates.checkCalls)
+        assertEquals(UpdateUiState.UpToDate, viewModel.updateState.value)
+    }
+
+    @Test fun `downloading an update surfaces the downloaded file`() = runTest {
+        val updates = FakeUpdateRepository()
+        val info = AppUpdateInfo(AppVersion(0, 6, 0), "v0.6.0", "https://example/app.apk", "https://example/releases/v0.6.0", "app.apk")
+        updates.outcome = UpdateCheckOutcome.UpdateAvailable(info)
+        val downloader = FakeUpdateDownloader()
+        val viewModel = BusAppViewModel(
+            FakeCredential(true), FakeDashboard(), updates, downloader,
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+
+        viewModel.downloadUpdate()
+        advanceUntilIdle()
+
+        val state = viewModel.updateState.value as UpdateUiState.Available
+        assertTrue(state.download is DownloadUiState.Downloaded)
     }
 
     private class FakeCredential(
@@ -124,5 +196,17 @@ class BusAppViewModelTest {
             VehicleLoadResult.Failure(BusDataError.ServiceUnavailable, null)
         override suspend fun routeSummary(routeId: String): RouteSummary? = null
         override suspend fun cachedDirections(route: RouteSummary) = emptyList<DirectionOption>()
+    }
+
+    private class FakeUpdateRepository(
+        var outcome: UpdateCheckOutcome = UpdateCheckOutcome.UpToDate,
+    ) : UpdateRepository {
+        var checkCalls = 0
+        override suspend fun checkForUpdate(): UpdateCheckOutcome { checkCalls++; return outcome }
+    }
+
+    private class FakeUpdateDownloader : UpdateDownloader {
+        override suspend fun download(info: AppUpdateInfo): DownloadOutcome =
+            DownloadOutcome.Success(java.io.File(info.assetName))
     }
 }

@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -33,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +46,7 @@ import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.DataFreshness
 import com.rafaam11.businfo.domain.FreshnessPolicy
 import com.rafaam11.businfo.domain.RouteStop
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -59,9 +63,14 @@ fun DashboardScreen(
     catalogPreparing: Boolean = false,
     catalogError: String? = null,
     onRetryCatalog: () -> Unit = {},
+    updateState: UpdateUiState = UpdateUiState.Idle,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadUpdate: () -> Unit = {},
+    onInstallUpdate: (File) -> Unit = {},
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("내 버스", fontWeight = FontWeight.Bold) }, actions = {
+            TextButton(onClick = onCheckForUpdate) { Text("업데이트 확인") }
             TextButton(onClick = onChangeKey) { Text("API 키 변경") }
         }) },
     ) { padding ->
@@ -70,6 +79,12 @@ fun DashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            when (updateState) {
+                UpdateUiState.Checking -> item { StatusBanner("새 버전 확인 중") }
+                is UpdateUiState.Available -> item { UpdateAvailableBanner(updateState, onDownloadUpdate, onInstallUpdate) }
+                is UpdateUiState.Failed -> item { StatusBanner("업데이트 확인 실패 · ${updateState.error.userMessage()}") }
+                UpdateUiState.Idle, UpdateUiState.UpToDate -> Unit
+            }
             if (catalogPreparing) item { StatusBanner("노선 정보를 준비하는 중입니다") }
             catalogError?.let {
                 item { DashboardErrorBanner(it) }
@@ -226,6 +241,38 @@ private fun SelectionRow(title: String, subtitle: String, onClick: () -> Unit) {
 @Composable private fun StatusBanner(text: String) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))) {
         Text(text, Modifier.fillMaxWidth().padding(14.dp))
+    }
+}
+
+@Composable
+private fun UpdateAvailableBanner(
+    state: UpdateUiState.Available,
+    onDownload: () -> Unit,
+    onInstall: (File) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("새 버전 ${state.info.tagName}이 있습니다", fontWeight = FontWeight.Bold)
+            when (val download = state.download) {
+                DownloadUiState.NotStarted -> Button(onClick = onDownload) { Text("다운로드") }
+                DownloadUiState.Downloading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("다운로드 중")
+                }
+                is DownloadUiState.Downloaded -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("출처를 알 수 없는 앱 설치 허용이 필요할 수 있습니다", style = MaterialTheme.typography.labelMedium)
+                    Button(onClick = { onInstall(download.file) }) { Text("설치") }
+                }
+                is DownloadUiState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(download.message, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = onDownload) { Text("다시 시도") }
+                }
+            }
+        }
     }
 }
 

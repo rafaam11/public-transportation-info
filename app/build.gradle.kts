@@ -5,6 +5,17 @@ val localProperties = Properties().apply {
 }
 val naverMapNcpKeyId = localProperties.getProperty("NAVER_MAP_NCP_KEY_ID").orEmpty()
 
+// 환경변수(CI) 우선, 없으면 local.properties(로컬 개발자용).
+fun releaseSigningProperty(name: String): String? =
+    System.getenv(name)?.takeIf(String::isNotBlank) ?: localProperties.getProperty(name)?.takeIf(String::isNotBlank)
+
+val releaseStoreFilePath = releaseSigningProperty("RELEASE_KEYSTORE_PATH")
+val releaseStorePassword = releaseSigningProperty("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
+val hasReleaseSigningConfig = listOf(releaseStoreFilePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+    .all { !it.isNullOrBlank() }
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -28,6 +39,25 @@ android {
         versionName = "0.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["naverMapNcpKeyId"] = naverMapNcpKeyId
+    }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {

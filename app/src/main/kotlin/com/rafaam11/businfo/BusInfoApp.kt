@@ -32,6 +32,7 @@ import com.rafaam11.businfo.ui.RealtimeMapViewModel
 import com.rafaam11.businfo.ui.SetupScreen
 import com.rafaam11.businfo.ui.map.NaverRealtimeMap
 import com.rafaam11.businfo.ui.userMessage
+import java.io.File
 
 @Composable
 fun BusInfoApp(
@@ -41,9 +42,11 @@ fun BusInfoApp(
     onOpenMapSlotConsumed: () -> Unit = {},
     openKeySettings: Boolean = false,
     onOpenKeySettingsConsumed: () -> Unit = {},
+    onInstallUpdate: (File) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val setup by viewModel.setupState.collectAsState()
+    val updateState by viewModel.updateState.collectAsState()
     val realtimeState by realtimeMapViewModel.uiState.collectAsState()
     LaunchedEffect(openKeySettings) {
         if (openKeySettings) {
@@ -85,6 +88,10 @@ fun BusInfoApp(
                             catalogPreparing = current.catalogPreparing,
                             catalogError = current.catalogError?.userMessage(),
                             onRetryCatalog = viewModel::retryCatalog,
+                            updateState = updateState,
+                            onCheckForUpdate = viewModel::checkForUpdatesOnce,
+                            onDownloadUpdate = viewModel::downloadUpdate,
+                            onInstallUpdate = onInstallUpdate,
                         )
                     }
                     composable("setup/{slot}") { entry ->

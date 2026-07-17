@@ -6,12 +6,16 @@ import com.rafaam11.businfo.data.CredentialGateway
 import com.rafaam11.businfo.data.DashboardDataSource
 import com.rafaam11.businfo.data.DashboardRepository
 import com.rafaam11.businfo.data.DirectionOption
+import com.rafaam11.businfo.data.DownloadOutcome
+import com.rafaam11.businfo.data.UpdateDownloader
+import com.rafaam11.businfo.data.UpdateRepository
 import com.rafaam11.businfo.domain.BusDataError
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.FavoriteDashboardSnapshot
 import com.rafaam11.businfo.domain.FavoriteSelection
 import com.rafaam11.businfo.domain.RouteStop
 import com.rafaam11.businfo.domain.RouteSummary
+import com.rafaam11.businfo.domain.UpdateCheckOutcome
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,12 +27,16 @@ import kotlinx.coroutines.launch
 class BusAppViewModel(
     private val credentials: CredentialGateway,
     private val dashboard: DashboardDataSource,
+    private val updates: UpdateRepository,
+    private val downloader: UpdateDownloader,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<AppUiState>(AppUiState.Starting)
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
     private val _setupState = MutableStateFlow(SetupUiState())
     val setupState: StateFlow<SetupUiState> = _setupState.asStateFlow()
+    private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
+    val updateState: StateFlow<UpdateUiState> = _updateState.asStateFlow()
 
     private var snapshots: List<FavoriteDashboardSnapshot> = emptyList()
     private var errors = emptyMap<CommuteSlot, String>()
@@ -37,6 +45,32 @@ class BusAppViewModel(
 
     init {
         if (credentials.savedKeyExists()) enterDashboard() else _uiState.value = AppUiState.NeedsKey()
+        checkForUpdatesOnce()
+    }
+
+    fun checkForUpdatesOnce() {
+        if (_updateState.value == UpdateUiState.Checking) return
+        _updateState.value = UpdateUiState.Checking
+        viewModelScope.launch(dispatcher) {
+            _updateState.value = when (val outcome = updates.checkForUpdate()) {
+                is UpdateCheckOutcome.UpdateAvailable -> UpdateUiState.Available(outcome.info)
+                UpdateCheckOutcome.UpToDate -> UpdateUiState.UpToDate
+                is UpdateCheckOutcome.Failed -> UpdateUiState.Failed(outcome.error)
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val available = _updateState.value as? UpdateUiState.Available ?: return
+        if (available.download is DownloadUiState.Downloading) return
+        _updateState.value = available.copy(download = DownloadUiState.Downloading)
+        viewModelScope.launch(dispatcher) {
+            val current = _updateState.value as? UpdateUiState.Available ?: return@launch
+            _updateState.value = when (val result = downloader.download(current.info)) {
+                is DownloadOutcome.Success -> current.copy(download = DownloadUiState.Downloaded(result.file))
+                is DownloadOutcome.Failed -> current.copy(download = DownloadUiState.Failed(result.message))
+            }
+        }
     }
 
     fun submitKey(key: String) {

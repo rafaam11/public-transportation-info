@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.rafaam11.businfo.data.BusRepository
 import com.rafaam11.businfo.data.DashboardRepository
+import com.rafaam11.businfo.data.GitHubUpdateRepository
 import com.rafaam11.businfo.data.RouteGeometryRepository
 import com.rafaam11.businfo.data.VehiclePositionRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
@@ -13,7 +14,10 @@ import com.rafaam11.businfo.data.local.MIGRATION_2_3
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import com.rafaam11.businfo.data.remote.AccubusPreciseRemoteDataSource
+import com.rafaam11.businfo.data.remote.OkHttpGitHubReleaseRemoteDataSource
 import com.rafaam11.businfo.ui.map.MapAuthMonitor
+import com.rafaam11.businfo.update.AndroidUpdateDownloader
+import com.rafaam11.businfo.update.UpdateInstaller
 import com.rafaam11.businfo.widget.CommuteWidgetRepository
 import com.rafaam11.businfo.widget.CommuteWidgetUpdateNotifier
 import com.rafaam11.businfo.widget.WidgetPreferenceStore
@@ -59,6 +63,15 @@ class AppGraph private constructor(context: Context) {
     val routeGeometryRepository = RouteGeometryRepository(credentials, remote, local, clock)
     val vehiclePositionRepository = VehiclePositionRepository(credentials, remote, local, clock)
     val mapAuthMonitor = MapAuthMonitor()
+
+    private val githubReleaseDataSource = OkHttpGitHubReleaseRemoteDataSource(
+        client = httpClient,
+        baseUrl = "https://api.github.com/repos/rafaam11/public-transportation-info/".toHttpUrl(),
+        clock = clock,
+    )
+    val updateRepository = GitHubUpdateRepository(githubReleaseDataSource, BuildConfig.VERSION_NAME)
+    val updateDownloader = AndroidUpdateDownloader(context.applicationContext)
+    val updateInstaller = UpdateInstaller(context.applicationContext)
 
     companion object {
         @Volatile
