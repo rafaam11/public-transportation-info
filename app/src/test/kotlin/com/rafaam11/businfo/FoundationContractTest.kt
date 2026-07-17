@@ -8,6 +8,43 @@ import org.junit.Test
 
 class FoundationContractTest {
     @Test
+    fun releaseVersionIs040() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
+
+        assertTrue(appBuild.contains("versionCode = 4"))
+        assertTrue(appBuild.contains("versionName = \"0.4.0\""))
+    }
+
+    @Test
+    fun visualIdentityAndWidgetPackagingIsWired() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val palette = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/ui/map/RoutePalette.kt").readText()
+        val renderer = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/ui/map/BusMarkerRenderer.kt").readText()
+        val adaptiveIcon = File(repoRoot, "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").readText()
+        val manifest = File(repoRoot, "app/src/main/AndroidManifest.xml").readText()
+        val provider = File(repoRoot, "app/src/main/res/xml/commute_widget_info.xml").readText()
+        val receiver = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetReceiver.kt").readText()
+        val widget = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidget.kt").readText()
+
+        assertTrue(palette.contains("object RoutePaletteResolver"))
+        assertTrue(palette.contains("0xFFFF4917"))
+        assertTrue(renderer.contains("Canvas(bitmap)"))
+        assertTrue(adaptiveIcon.contains("<adaptive-icon"))
+        assertTrue(adaptiveIcon.contains("@drawable/ic_launcher_foreground"))
+        assertTrue(manifest.contains("android:name=\".widget.CommuteWidgetReceiver\""))
+        assertTrue(receiver.contains("GlanceAppWidgetReceiver"))
+        assertTrue(receiver.contains("GlanceAppWidget = CommuteWidget()"))
+        assertTrue(provider.contains("android:updatePeriodMillis=\"0\""))
+        assertTrue(widget.contains("class CommuteWidget : GlanceAppWidget()"))
+        assertTrue(widget.contains("MainActivity.EXTRA_OPEN_MAP_SLOT"))
+    }
+
+    @Test
     fun productionPackageIsStable() {
         assertEquals("com.rafaam11.businfo", BuildConfig.APPLICATION_ID)
     }
