@@ -9,9 +9,9 @@ const testEnv: SearchEnv = {
   NAVER_SEARCH_CLIENT_SECRET: "test-client-secret",
 };
 
-async function invoke(input: string, init?: RequestInit): Promise<Response> {
+async function invoke(input: string, init?: RequestInit, environment: SearchEnv = testEnv): Promise<Response> {
   const context = createExecutionContext();
-  const response = await worker.fetch(new Request(input, init), testEnv, context);
+  const response = await worker.fetch(new Request(input, init), environment, context);
   await waitOnExecutionContext(context);
   return response;
 }
@@ -81,5 +81,24 @@ describe("place search worker", () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "place_search_unavailable" });
+  });
+
+  it("rejects a client when the rate-limit binding is exhausted", async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+    const limitedEnv: SearchEnv = {
+      ...testEnv,
+      PLACE_RATE_LIMITER: {
+        limit: vi.fn().mockResolvedValue({ success: false }),
+      } as RateLimit,
+    };
+
+    const response = await invoke("https://worker.test/v1/places?q=동대구역", {
+      headers: { "cf-connecting-ip": "203.0.113.10" },
+    }, limitedEnv);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(upstream).not.toHaveBeenCalled();
   });
 });

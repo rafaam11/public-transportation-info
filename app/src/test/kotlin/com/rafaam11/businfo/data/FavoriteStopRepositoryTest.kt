@@ -31,6 +31,17 @@ class FavoriteStopRepositoryTest {
         assertEquals(1, local.values.size)
     }
 
+    @Test fun `favorite mutations notify bound widgets`() = runTest {
+        val local = FakeStopCenteredLocalDataSource(mutableListOf())
+        var notifications = 0
+        val repository = DefaultFavoriteStopRepository(local, onChanged = { notifications++ })
+
+        repository.save(favorite(1))
+        repository.delete(FavoriteStopId("favorite-1"))
+
+        assertEquals(2, notifications)
+    }
+
     private fun favorite(index: Int) = FavoriteStop(
         id = FavoriteStopId("favorite-$index"),
         stopId = "stop-$index",

@@ -40,8 +40,8 @@ android {
         applicationId = "com.rafaam11.businfo"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.6.1"
+        versionCode = 8
+        versionName = "0.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["naverMapNcpKeyId"] = naverMapNcpKeyId
         buildConfigField("String", "PLACE_SEARCH_BASE_URL", placeSearchBaseUrl.asBuildConfigString())
@@ -94,6 +94,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.naver.map)
     implementation(libs.glance.appwidget)
+    implementation(libs.work.runtime)
     ksp(libs.room.compiler)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

@@ -33,7 +33,7 @@ class CommuteWidgetContractTest {
         assertTrue(configuration.contains("ComponentName(this, CommuteWidgetReceiver::class.java)"))
         assertTrue(configuration.contains("setResult(Activity.RESULT_CANCELED)"))
         assertTrue(configuration.contains("if (!ownership.isOwned())"))
-        assertTrue(configuration.contains("if (!ownership.runIfOwned { persistChoice(slot) })"))
+        assertTrue(configuration.contains("if (!ownership.runIfOwned { persistChoice(favorite) })"))
     }
 
     @Test
@@ -49,7 +49,7 @@ class CommuteWidgetContractTest {
     }
 
     @Test
-    fun activityConsumesOnlyPrivateOneShotKeyRequestAndIgnoresMaliciousExtra() {
+    fun widgetDeepLinkUsesFavoriteStopIdAndIsConsumedOnce() {
         val activity = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/MainActivity.kt").readText()
         val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
         val trampoline = File(
@@ -57,15 +57,15 @@ class CommuteWidgetContractTest {
             "app/src/main/kotlin/com/rafaam11/businfo/widget/WidgetKeySettingsActivity.kt",
         )
 
-        assertTrue(activity.contains("EXTRA_OPEN_MAP_SLOT"))
+        assertTrue(activity.contains("EXTRA_OPEN_FAVORITE_STOP_ID"))
         assertFalse(activity.contains("EXTRA_OPEN_KEY_SETTINGS"))
         assertTrue(activity.contains("keySettingsRequests.consume()"))
         assertTrue(activity.contains("onNewIntent"))
-        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_MAP_SLOT)"))
+        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_FAVORITE_STOP_ID)"))
         assertTrue(trampoline.isFile)
         assertTrue(trampoline.readText().contains("keySettingsRequests.request()"))
-        assertTrue(app.contains("nav.navigate(\"map/${'$'}{slot.name}\")"))
-        assertTrue(app.contains("onOpenMapSlotConsumed"))
+        assertTrue(app.contains("nav.navigate(\"stop\")"))
+        assertTrue(app.contains("onOpenFavoriteStopConsumed"))
     }
 
     @Test
@@ -92,31 +92,27 @@ class CommuteWidgetContractTest {
         val notifier = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetUpdateNotifier.kt").readText()
         val receiver = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetReceiver.kt").readText()
 
-        assertTrue(widget.contains("GlanceAppWidgetManager(context).getAppWidgetId(glanceId)"))
+        assertTrue(widget.contains("GlanceAppWidgetManager(context).getAppWidgetId(id)"))
         assertFalse(widget.contains("glanceId as"))
-        assertTrue(widget.contains("commuteWidgetRepository.refresh(appWidgetId)"))
-        assertTrue(widget.contains("API 키 변경"))
-        assertTrue(widget.contains("Intent(context, WidgetKeySettingsActivity::class.java)"))
+        assertTrue(widget.contains("stopWidgetRepository.refresh(appWidgetId)"))
         assertFalse(widget.contains("EXTRA_OPEN_KEY_SETTINGS"))
-        assertTrue(widget.contains("노선을 설정해 주세요"))
+        assertTrue(widget.contains("정류장을 설정해 주세요"))
         assertTrue(notifier.contains("CommuteWidget().updateAll(applicationContext)"))
-        assertTrue(receiver.contains("appWidgetIds.forEach(repository::clear)"))
+        assertTrue(receiver.contains("appWidgetIds.forEach { repository.clear(it) }"))
+        assertTrue(receiver.contains("val pendingResult = goAsync()"))
+        assertTrue(receiver.contains("pendingResult.finish()"))
     }
 
     @Test
-    fun requiresConfigurationRoutesToRealSetupScreenWhenSlotIsAlreadyKnown() {
-        val widget = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidget.kt").readText()
-        val activity = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/MainActivity.kt").readText()
-        val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
+    fun configurationPersistsBindingBeforeImmediateUpdateAndUniqueBootstrap() {
+        val configuration = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/CommuteWidgetConfigurationActivity.kt").readText()
+        val worker = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/widget/StopWidgetBootstrapWorker.kt").readText()
 
-        // The "설정" button must not just reopen the MORNING/EVENING picker when a slot is
-        // already assigned — that loop never lets a user without a favorite configure a route.
-        assertTrue(widget.contains("class OpenCommuteSetupAction"))
-        assertTrue(widget.contains("MainActivity.EXTRA_OPEN_SETUP_SLOT"))
-        assertTrue(widget.contains("configureOrSetupAction(context, state)"))
-        assertTrue(activity.contains("EXTRA_OPEN_SETUP_SLOT"))
-        assertTrue(activity.contains("intent.removeExtra(EXTRA_OPEN_SETUP_SLOT)"))
-        assertTrue(app.contains("nav.navigate(\"setup/${'$'}{slot.name}\")"))
-        assertTrue(app.contains("onOpenSetupSlotConsumed"))
+        assertTrue(configuration.indexOf("stopWidgetRepository.bind") < configuration.indexOf("CommuteWidget().update"))
+        assertTrue(configuration.contains("EXTRA_APPWIDGET_ID"))
+        assertTrue(configuration.contains("StopWidgetBootstrapWorker.enqueue"))
+        assertTrue(worker.contains("enqueueUniqueWork"))
+        assertTrue(worker.contains("stop-widget-bootstrap-${'$'}appWidgetId"))
+        assertTrue(worker.contains("ExistingWorkPolicy.REPLACE"))
     }
 }

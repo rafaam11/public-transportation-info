@@ -112,7 +112,7 @@ fun FavoriteStop.routesForHome(
     limit: Int,
 ): List<StopArrivalGroup> {
     require(limit >= 0)
-    if (pinnedRoutes.isEmpty()) return groups.take(limit)
+    if (pinnedRoutes.isEmpty()) return groups.sortedWith(compareBy(nullsLast()) { it.soonestArrivalSeconds }).take(limit)
     val groupsByKey = groups.associateBy(StopArrivalGroup::key)
     return pinnedRoutes.sortedBy(PinnedRoute::sortOrder).mapNotNull { groupsByKey[it.key] }.take(limit)
 }

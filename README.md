@@ -1,186 +1,97 @@
-<p align="center">
-  <img src="docs/banner.svg" alt="대구 버스" width="100%">
-</p>
+# 대구 버스
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-2.4-171d28?logo=kotlin&logoColor=7F52FF" alt="Kotlin 2.4">
-  <img src="https://img.shields.io/badge/Jetpack%20Compose-Material3-171d28?logo=jetpackcompose&logoColor=4285F4" alt="Jetpack Compose">
-  <img src="https://img.shields.io/badge/platform-Android-171d28?logo=android&logoColor=3DDC84" alt="Android">
-  <img src="https://img.shields.io/badge/minSdk-26-171d28" alt="minSdk 26">
-  <img src="https://img.shields.io/github/v/release/rafaam11/public-transportation-info?display_name=tag&label=release&color=171d28" alt="latest release">
-  <img src="https://img.shields.io/badge/distribution-sideload-3fb950" alt="sideload">
-</p>
+대구광역시 버스 공공데이터와 Accubus 초정밀 위치를 정류장 중심으로 보여주는 Android 앱이다. Google Play가 아닌 [GitHub Releases](https://github.com/rafaam11/public-transportation-info/releases)에서 APK를 배포한다.
 
-**대구 버스**는 대구광역시 버스정보시스템 공공데이터와 대구시 초정밀 위치(Accubus)를 이용해 **출퇴근 버스를 확인하는 개인용 Android 네이티브 앱**이다. Google Play에는 배포하지 않고, GitHub Releases에서 APK를 내려받아 설치하는 사이드로드 방식으로 배포한다.
+## 0.7.0 주요 기능
 
-- 출근·퇴근 두 카드에 저장한 노선·정류장의 가장 가까운 도착 차량과 데이터 신선도를 대시보드에서 바로 확인한다.
-- 카드를 탭하면 네이버 지도 위에 도로망 기반 노선 경로와 **초정밀 실시간 차량 위치**(Accubus)가 뜬다.
-- 홈 화면 위젯으로 출근·퇴근 카드 중 하나를 골라 붙여 둘 수 있다 — 자동 주기 갱신은 하지 않고 탭했을 때만 새로고침한다.
-- 앱을 열면 GitHub Releases의 최신 버전을 1회 확인하고, 새 버전이 있으면 앱 안에서 다운로드·설치까지 진행한다.
+- 단일 홈 상단의 `햄버거 | 버스·정류장·장소 검색 | 내 주변`
+- 최대 20개 즐겨찾기 정류장과 선택적 고정 노선
+- 정류장 전체 노선의 도착정보를 한 번에 조회하고 마지막 성공 시각과 함께 캐시
+- 검색 결과를 버스·정류장·장소로 묶어 한 화면에 표시
+- 사용자가 `내 주변`을 누를 때만 위치 권한 요청. 500m 안에서 최대 10개를 찾고 5개 미만이면 1km로 확장
+- 장소 또는 현재 위치를 첫 카메라로 하는 주변 지도와 정류장 마커
+- 정류장 상세 지도의 첫 프레임을 선택 정류장 좌표로 생성해 서울시청 기본 위치 노출 방지
+- 선택 정류장에 아직 도착하지 않은 모든 노선·방향의 초정밀 차량을 동시에 표시
+- 강조 노선 3초, 나머지 8초, 차량 명단 30초 갱신. 상세 좌표 요청 전체 동시성 4개
+- GPS 위치는 15초까지 정상, 15~30초 반투명, 30초 초과 숨김. 예측·보간 없음
+- 위젯 하나를 즐겨찾기 정류장 하나에 연결. 작은 크기는 2개, 넓은 크기는 4개 노선 표시
+- 위젯은 설정 직후 즉시 갱신하고 고유 1회성 부트스트랩을 실행하며, 이후 네트워크는 수동 새로고침과 앱 동기화에만 사용
+- GitHub Releases 공지 및 앱 업데이트 확인
 
-위치 권한을 요청하지 않고, 백그라운드에서 주기적으로 네트워크를 호출하지 않는다. 위젯 새로고침·업데이트 확인 모두 앱을 열거나 버튼을 누르는 등 **명시적인 사용자 행동에만** 네트워크 호출이 결합된다.
+## 설치와 초기 설정
 
-## 미리보기
+1. Releases에서 최신 `daegu-bus-x.y.z.apk`를 내려받아 설치한다.
+2. 공공데이터포털의 `대구광역시_대구버스정보시스템` 활용 신청 후 받은 일반 인증키의 **Decoding 값**을 앱에 입력한다.
+3. `내 주변`을 사용할 때만 Android 위치 권한을 허용한다. 거부해도 검색·즐겨찾기·정류장 지도는 계속 동작한다.
 
-<p align="center"><img src="docs/mockup-dashboard.svg" alt="출퇴근 대시보드 — 출근/퇴근 카드, 업데이트 배너" width="55%"></p>
+0.6.x에서 0.7.0으로 갱신하면 기존 출근/퇴근 슬롯과 해당 도착 캐시·위젯 연결은 정리된다. 공공데이터 API 키와 재사용 가능한 노선·경로·차량 캐시는 유지된다.
 
-<p align="center"><em>출퇴근 대시보드 — 저장한 노선의 가장 가까운 도착 차량과 데이터 신선도, 새 버전이 있을 때 뜨는 업데이트 배너.</em></p>
+## 로컬 개발
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/mockup-realtime-map.svg" alt="실시간 버스 지도" width="100%"><br><sub><b>실시간 지도</b> — 도로망 기반 노선 경로 · 초정밀 위치 · GPS 신선도에 따른 마커 반투명/숨김</sub></td>
-    <td width="50%"><img src="docs/mockup-widget.svg" alt="홈 화면 위젯" width="100%"><br><sub><b>홈 화면 위젯</b> — 컴팩트(180×110dp) · 확장(300×180dp), 탭하면 실시간 지도로 이동</sub></td>
-  </tr>
-</table>
-
-## 설치
-
-Google Play에는 배포하지 않으므로 GitHub Releases에서 APK를 직접 받아 설치한다.
-
-1. [Releases](https://github.com/rafaam11/public-transportation-info/releases)에서 최신 **`daegu-bus-x.y.z.apk`**를 내려받는다.
-2. 서명은 되어 있지만 스토어에 등록된 앱이 아니라 "출처를 알 수 없는 앱" 경고가 뜰 수 있다 — 설치 화면에서 뜨는 안내를 따라 허용하거나, 설정에서 해당 앱(브라우저·파일 관리자)의 설치 허용을 켠다.
-3. 설치 후 앱을 열고 공공데이터포털에서 발급받은 대구광역시 버스정보시스템 API 키를 입력한다.
-
-**Node.js나 별도 런타임 설치는 필요 없다** — 순수 네이티브 Android APK다.
-
-## 업데이트 (반자동)
-
-앱을 열면 GitHub Releases의 최신 버전을 **1회** 조회해 새 버전이 있으면 대시보드 상단에 배너로 안내한다. 언제든 **업데이트 확인** 버튼으로 같은 확인을 다시 실행할 수 있다. 배너의 **다운로드** 버튼을 누르면 APK를 앱 전용 저장소에 받고, 완료되면 **설치** 버튼이 시스템 설치 확인 화면을 연다 — "출처를 알 수 없는 앱" 설치 권한이 꺼져 있으면 먼저 설정 화면으로 안내한다.
-
-Electron 앱들의 무음 자동 업데이트와는 다르다 — 이 앱은 **다운로드도 설치도 항상 버튼을 눌러야** 진행되고, 백그라운드 폴링은 하지 않는다(위젯과 같은 원칙). GitHub Releases는 draft 상태에서는 `/releases/latest`에 노출되지 않으므로, 유지관리자가 릴리스를 수동으로 publish하기 전까지는 앱의 업데이트 확인에도 잡히지 않는다.
-
-## 주요 기능
-
-- **출퇴근 대시보드** — 출근/퇴근 카드에 저장한 노선·정류장의 가장 가까운 도착 차량, 다음 차량, 데이터 신선도(최신·지연·오래됨)와 경과 시간을 보여준다. 카드를 탭하면 실시간 지도로, "편집"을 누르면 노선 재설정·삭제로 이동한다.
-- **실시간 버스 지도** — 선택한 노선의 도로망 기반 경로(링크 조립)와 실시간 차량 위치를 네이버 지도 위에 그린다. 지도 차량 마커는 대구 버스정보시스템의 초정밀 화면이 쓰는 Accubus 상세 응답의 확인된 GPS 좌표만 쓰고, 공개 API 좌표는 전체 운행 대수 집계에만 사용한다. GPS 수신 15초 초과는 반투명, 30초 초과는 숨김으로 표시하며 위치를 보간·예측하지 않는다.
-- **홈 화면 위젯** — 출근·퇴근 카드 중 하나를 선택하는 Jetpack Glance 위젯. 컴팩트(180×110dp)와 확장(300×180dp) 두 크기를 반응형으로 지원하며, 탭하면 새로고침하고 다시 탭하면 앱의 해당 실시간 지도로 이동한다. 자동 주기 갱신은 없다.
-- **앱 내 업데이트 확인** — 앱 실행 시 1회 자동 확인 + 수동 재확인 버튼. GitHub Releases에서 최신 버전을 조회해 새 APK를 다운로드·설치까지 안내한다.
-- **API 키 관리** — 공공데이터포털 발급 키를 앱 내부에서 입력·검증·저장한다. 새 키 검증이 성공하기 전에는 기존 키를 삭제·교체하지 않는다.
-
-## 사용법
-
-**카드 설정** — 대시보드에서 빈 카드의 "버스 추가"를 누르고 노선번호 또는 기·종점으로 검색 → 방향 선택 → 승차 정류장 선택 순으로 저장한다. 카드를 눌러 실시간 지도로 이동하거나, "편집"으로 노선을 다시 설정하거나 삭제할 수 있다.
-
-**실시간 지도** — 카드를 탭하면 저장한 노선·방향의 도로망 기반 경로와 실시간 차량 위치가 뜬다. 하단 시트에 전체 운행 대수와 초정밀 위치 대수가 구분되어 표시되고, "노선 전체 보기"로 카메라를 다시 맞출 수 있다.
-
-**홈 화면 위젯** — 출근 또는 퇴근 카드를 선택해 홈 화면에 추가한다. 위젯을 탭하면 새로고침되고, 다시 탭하면 앱의 해당 실시간 지도로 이동한다.
-
-**업데이트 확인** — 대시보드 상단의 "업데이트 확인"을 누르거나 앱을 다시 열면 최신 버전을 조회한다. 새 버전 배너의 다운로드·설치 버튼을 순서대로 누르면 갱신된다.
-
-**API 키 변경** — 대시보드 상단의 "API 키 변경"에서 새 키를 입력해 검증한다.
-
-## 아키텍처
-
-<p align="center"><img src="docs/architecture.svg" alt="아키텍처 다이어그램 — UI · ViewModel · Repository · 원격 데이터 소스, 안전장치 4종" width="100%"></p>
-
-Compose UI(`DashboardScreen`·`RealtimeMapScreen`·`CommuteWidget`)가 `BusAppViewModel`/`RealtimeMapViewModel`의 `StateFlow`를 직접 구독한다. 별도 렌더러·IPC 계층은 없다 — `AppGraph`가 수동 DI로 만든 Repository(`DashboardRepository`·`UpdateRepository` 등)가 원격 데이터 소스(대구 버스 공공데이터 API, Accubus 초정밀 위치, NAVER Map SDK, GitHub Releases)와 로컬 Room 캐시를 중계한다.
-
-### 네이버 지도 로컬 설정
-
-NAVER Cloud Maps 애플리케이션에서 Dynamic Map을 활성화하고 Android 패키지
-`com.rafaam11.businfo`를 등록한다. 발급된 NCP Key ID는 Git에 넣지 않고 프로젝트 루트의
-ignored `local.properties`에 다음 이름으로만 저장한다.
-
-`NAVER_MAP_NCP_KEY_ID=<발급된 Key ID>`
-
-값이 없으면 APK는 빌드되지만 실기기 지도 인증은 실패 상태로 표시된다.
-
-### 초정밀 위치 데이터
-
-지도 차량 마커는 대구 버스정보시스템의 초정밀 화면이 사용하는 Accubus 상세 응답의
-확인된 GPS 좌표만 표시한다. 공개 `getPos02` 응답은 전체 운행 대수와 최근 정류소 정보에만
-사용하며, 그 좌표를 지도 마커로 대신 표시하지 않는다. GPS 수신 시각이 15초를 넘으면
-마커를 반투명으로 표시하고 30초를 넘으면 숨긴다. 위치를 보간·예측하거나 도로 위로
-강제 보정하지 않는다.
-
-Accubus 경로는 대구시의 공개 웹 화면이 사용하는 1차 시스템이지만 공개 API 계약이나
-가용성 보장이 없다. 연결 실패는 차량별로 격리하고 마지막 확인 위치도 30초 후 제거한다.
-내부 차량 식별자와 증분 요청 커서는 메모리에만 두며 저장·로그·화면 표시에 사용하지 않는다.
-
-대구 실시간 신호등은 현재 이용 가능한 공식 API 범위에 포함되지 않으므로 표시하거나
-추정하지 않는다. 향후 공식 전국 신호 API에 대구 코드 `2700000000`이 제공될 때 별도
-데이터 소스로 추가한다.
-
-## 안전장치
-
-- **TLS 인증서 고정** — 현재 Accubus 서버는 leaf 발급자인 `GlobalSign GCC R3 DV TLS CA 2020` 대신 관련 없는 인증서를 TLS 체인에 함께 보내 Android가 경로를 완성하지 못한다. 앱은 leaf 인증서의 공식 AIA 주소에서 받은 해당 GlobalSign 중간 인증서만 `accubus.daegu.go.kr` **단일 도메인**의 추가 trust anchor로 등록한다. 시스템 CA 신뢰는 그대로 유지하며 하위 도메인이나 다른 호스트에는 적용하지 않는다. 서버 체인이 정상화되면 이 보완 설정을 다시 검증하고 제거한다.
-- **백그라운드 폴링 없음** — 위젯과 업데이트 확인 모두 자동 주기 네트워크 호출을 하지 않는다. 앱을 열거나 버튼을 누르는 등 명시적인 사용자 행동에만 네트워크 호출이 결합된다.
-- **위치 권한 요청 없음** — `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`을 요청하지 않는다. 지도에 쓰는 위치는 전부 서버가 보고하는 차량 위치이지 기기 위치가 아니다.
-- **크리덴셜 저장 범위** — 공공데이터 API 키는 `SharedPreferences`의 `credentials` prefs에만 저장하고, Android 자동 백업(`dataExtractionRules`)에서 명시적으로 제외한다.
-- **릴리스 서명 키스토어 고정** — 배포 서명 키스토어는 생성 이후 재생성하지 않는다. 서명이 바뀌면 기존 설치본이 인앱 업데이트로 새 버전을 설치할 수 없게 되어(서명 불일치) 사용자가 수동으로 재설치해야 한다.
-
-## 로컬 데이터
-
-| 경로 | 내용 |
-|---|---|
-| `local.properties` (Git 추적 제외) | `NAVER_MAP_NCP_KEY_ID` · `DAEGU_BUS_SERVICE_KEY`(api-probe용) · 로컬 release 서명 정보 |
-| `SharedPreferences: credentials` | 사용자가 입력한 공공데이터 API 키. 자동 백업에서 제외됨 |
-| `SharedPreferences: widget` | 위젯 슬롯이 가리키는 출근/퇴근 즐겨찾기 매핑 |
-| Room DB `bus-info.db` | 노선·정류장·경로 캐시, 최근 도착 스냅숏 |
-| `getExternalFilesDir(Download)` | 앱 내 업데이트 확인이 내려받은 APK가 저장되는 위치(설치 후에도 자동 삭제되지 않음) |
-
-## 개발
-
-단일 Gradle 프로젝트(`:app` + API 계약 검증용 `:api-probe`). 모든 명령은 루트에서 실행한다.
+요구사항은 JDK 17, Android SDK, Node.js 22 이상이다.
 
 ```powershell
-git clone https://github.com/rafaam11/public-transportation-info.git
-cd public-transportation-info
-.\gradlew.bat :app:assembleDebug
+.\gradlew.bat testDebugUnitTest
+.\gradlew.bat compileDebugAndroidTestKotlin
+.\gradlew.bat assembleDebug lintDebug
 ```
 
-`local.properties`(Git 추적 제외)에 다음 값을 저장한다.
+프로젝트 루트의 Git 제외 파일 `local.properties`에서 로컬 값을 설정한다.
 
-| 키 | 설명 |
+```properties
+sdk.dir=C\:\\Android\\Sdk
+NAVER_MAP_NCP_KEY_ID=
+DAEGU_BUS_SERVICE_KEY=
+PLACE_SEARCH_BASE_URL=https://your-worker.example.com/
+```
+
+- `NAVER_MAP_NCP_KEY_ID`: NAVER Cloud Maps Dynamic Map의 Android Key ID
+- `DAEGU_BUS_SERVICE_KEY`: API probe에서만 사용하는 공공데이터 Decoding 키
+- `PLACE_SEARCH_BASE_URL`: 배포된 장소 검색 Worker의 루트 URL. 없으면 버스·정류장 검색은 동작하고 장소 섹션만 비어 있다.
+
+비밀값, 키스토어, `.dev.vars`, APK는 커밋하지 않는다.
+
+## 장소 검색 Worker
+
+`place-search-worker/`는 Naver Local Search 클라이언트 ID와 secret을 Android 앱 대신 보관한다. `GET /v1/places?q=`만 제공하며 대구 결과 최대 5개, 10분 캐시, 클라이언트별 분당 30회 제한을 적용한다.
+
+```powershell
+cd place-search-worker
+npm install
+npm run types
+npm test
+npm run typecheck
+npm run check:types
+npm run deploy:dry
+
+npx wrangler secret put NAVER_SEARCH_CLIENT_ID
+npx wrangler secret put NAVER_SEARCH_CLIENT_SECRET
+npx wrangler deploy
+```
+
+마지막 세 명령은 실제 Cloudflare 계정과 운영 비밀키가 준비된 안전한 대화형 환경 또는 CI에서만 실행한다.
+
+## 데이터와 안전 경계
+
+| 저장소 | 내용 |
 |---|---|
-| `NAVER_MAP_NCP_KEY_ID` | NAVER Cloud Maps Dynamic Map Key ID |
-| `DAEGU_BUS_SERVICE_KEY` | 공공데이터포털 발급 대구광역시 버스정보시스템 일반 인증키 (Decoding 값, `api-probe` 모듈 실행 시에만 필요) |
-| `RELEASE_KEYSTORE_PATH` 등 | 로컬에서 서명된 release 빌드를 테스트하려는 경우에만 필요 — [릴리스](#릴리스-유지관리자용) 참고 |
+| `SharedPreferences: credentials` | 공공데이터 API 키. Android 백업 제외 |
+| `SharedPreferences: api-call-diagnostics` | 서울 시간 기준 일별 API 호출 수 |
+| Room `bus-info.db` v4 | 정류장 카탈로그, 즐겨찾기 정류장, 고정 노선, 도착 캐시, 위젯 바인딩, 노선·경로 캐시 |
+| Worker secrets | Naver Local Search 클라이언트 ID와 secret |
 
-| 스크립트 | 설명 |
-|---|---|
-| `:app:assembleDebug` | 로컬 개발용 debug APK 빌드 |
-| `:app:testDebugUnitTest` | JVM 유닛 테스트 (`app/src/test`) |
-| `:app:compileDebugAndroidTestKotlin` | 계측 테스트 컴파일만(실행은 실기기·에뮬레이터 필요) |
-| `:app:assembleRelease` | release APK 빌드 — 서명 정보가 없으면 로컬에서는 서명되지 않은 채로 빌드된다 |
-| `:api-probe:run --args="getBasic02"` | 대구 버스 공공 API 계약을 실제로 호출해 검증 |
+- 위젯과 앱 업데이트에는 주기 백그라운드 네트워크가 없다.
+- 위치 권한은 앱 시작 시 요청하지 않고 `내 주변` 동작에서만 요청한다.
+- Accubus 내부 차량 식별자와 증분 커서는 메모리에만 유지한다.
+- 연결형 Android 테스트는 설치된 앱 데이터를 바꿀 수 있으므로 명시적 승인 후 실행한다.
 
-**요구사항** — Android SDK, JDK 17. Node.js는 필요 없다(순수 Kotlin/Gradle 프로젝트).
+## 구조
 
-### 실기기 APK 인수 테스트
+- Compose Material 3: 단일 홈, 그룹 검색, 주변 지도, 정류장 상세
+- Room v4: 정류장 중심 로컬 상태와 위젯 바인딩
+- OkHttp: 대구 공공데이터, Accubus, GitHub Releases, 장소 검색 Worker
+- NAVER Maps SDK: 첫 프레임 카메라 옵션과 실시간 마커
+- Jetpack Glance + WorkManager: 반응형 정류장 위젯과 설정 직후 1회성 부트스트랩
+- Cloudflare Workers + Vitest: Naver 장소 검색 비밀 프록시
 
-테스트에는 공공데이터포털에서 발급받은 `대구광역시_대구버스정보시스템` 일반 인증키의 **Decoding 값**, NAVER Maps NCP Key ID, Android 실기기가 필요하다. 두 키를 명령줄, 스크린샷, 이슈, 로그 또는 Git에 남기지 않는다.
-
-1. `NAVER_MAP_NCP_KEY_ID`가 설정된 상태로 debug APK를 빌드하고, USB 디버깅이 연결된 기기에 앱 데이터를 유지하는 `adb install -r`로 설치한다.
-
-   ```powershell
-   .\gradlew.bat :app:assembleDebug
-   adb install -r app\build\outputs\apk\debug\app-debug.apk
-   ```
-
-2. 급행8-1 카드에서 실시간 지도를 열고 저장한 방향의 노선·정류소·차량만 나타나는지 확인한다. 차량은 급행 공식 색상 `#FF4917`의 옆모습 버스이고, 각 차량 안에 전체 노선번호가 표시되어야 한다.
-3. 링크 기반 노선선이 도로망을 따라가고 불연속 구간을 임의의 직선으로 가로지르지 않는지 확인한다.
-4. 시트에 `전체 운행 n대 · 초정밀 위치 m대`가 구분되어 보이고, 초정밀 차량 위치가 약 3초 간격으로 갱신되는지 확인한다. 새 응답 사이에 마커가 추정 이동하지 않아야 한다.
-5. 지도를 직접 이동한 뒤 일반 갱신에서 카메라가 초기화되지 않는지, `노선 전체 보기`를 누르면 전체 노선으로 다시 맞춰지는지 확인한다.
-6. 네트워크를 끄고 차량별 GPS 수신 시각 15초 이후 반투명 지연 표시, 30초 이후 차량 마커 숨김을 확인한다. 이때 공개 API의 정류소 좌표가 대체 마커로 나타나면 안 된다.
-7. 앱을 백그라운드로 보낸 뒤 공개 요약과 초정밀 위치 호출이 모두 멈추고, 다시 열면 즉시 갱신되는지 확인한다.
-8. NAVER 지도 인증 오류가 대구 버스 API 키 오류와 구분되어 표시되는지 확인한다.
-9. 런처에서 새 버스 아이콘을 확인한다. 출근·퇴근 위젯을 각각 추가한 뒤 저장된 도착 정보, 수동 새로고침, 네트워크 실패 시 마지막 값 유지, 카드 탭의 해당 실시간 지도 이동을 확인한다. 위젯은 자동 주기 요청을 하지 않는다. API 키 오류의 `API 키 변경`은 앱 내부의 비공개 진입점을 통해서만 열리며, 새 키 검증이 성공하기 전에는 기존 키를 삭제하거나 교체하지 않는다.
-10. 이전 버전이 설치된 상태에서 앱을 열어 업데이트 배너가 뜨는지, 다운로드·설치 버튼이 실제로 동작하는지 확인한다. 최신 버전에서는 배너가 뜨지 않아야 한다. "출처를 알 수 없는 앱" 권한이 꺼져 있으면 설정 화면으로 안내되는지도 확인한다.
-
-연결형 Android 테스트는 앱 데이터가 교체될 수 있으므로 별도 승인 없이 실행하지 않는다.
-
-## 릴리스 (유지관리자용)
-
-1. `app/build.gradle.kts`의 `versionCode`와 `versionName`을 **둘 다** 올린다. `versionCode`를 빼먹으면 인앱 업데이트 설치가 `INSTALL_FAILED_VERSION_DOWNGRADE`로 실패한다.
-2. 커밋 후 태그를 붙여 푸시한다.
-
-   ```powershell
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
-   ```
-
-3. GitHub Actions(`.github/workflows/release.yml`)가 태그와 `versionName`이 일치하는지 검증하고, 단위 테스트를 돌린 뒤 서명된 release APK를 빌드해 같은 태그의 **draft 릴리스**에 첨부한다.
-4. GitHub에서 draft 릴리스 노트를 확인하고 **수동으로 publish**한다.
-
-> **최초 1회**는 릴리스 서명 키스토어를 만들고(`keytool -genkeypair ... -storetype PKCS12`) base64로 인코딩해 저장소 GitHub Secrets에 `RELEASE_KEYSTORE_BASE64` · `RELEASE_KEYSTORE_PASSWORD` · `RELEASE_KEY_ALIAS` · `RELEASE_KEY_PASSWORD` · `NAVER_MAP_NCP_KEY_ID` 5개로 등록해야 한다. **이 키스토어는 이후 절대 재생성하지 않는다** — 재생성하면 서명이 바뀌어 기존 설치본이 인앱 업데이트를 받을 수 없다. 값은 로그·커밋·이슈에 남기지 않고, 키스토어 파일은 리포지토리 밖에 별도로 백업해 둔다.
+상세 설계와 구현 체크리스트는 `docs/superpowers/specs/2026-07-18-stop-centered-daegu-bus-redesign.md`와 `docs/superpowers/plans/2026-07-18-stop-centered-daegu-bus-redesign.md`에 있다.

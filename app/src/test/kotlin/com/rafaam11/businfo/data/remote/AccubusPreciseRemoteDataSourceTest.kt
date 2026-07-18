@@ -176,6 +176,21 @@ class AccubusPreciseRemoteDataSourceTest {
         assertTrue(maximum.get() in 2..4)
     }
 
+    @Test fun `vehicles that already passed target never trigger detail requests`() = runTest {
+        server.enqueue(json(roster(item("approaching", "0", 4), item("passed", "0", 6))))
+        server.enqueue(json(detail("approaching", "0", "202045", 128.611, 35.811, 90)))
+        source.configureTargetStopSequence(5)
+
+        source.refreshRoster(selection)
+        val batch = (source.refreshPositions(selection) as PreciseDataResult.Success).value
+
+        assertEquals(1, batch.rosterCount)
+        assertEquals(1, batch.positions.size)
+        assertEquals(2, server.requestCount)
+        assertTrue(server.takeRequest().path!!.contains("/realtime/pos/"))
+        assertTrue(server.takeRequest().path!!.contains("/realtime/vhcPos/approaching"))
+    }
+
     private fun json(body: String) = MockResponse()
         .setResponseCode(200)
         .setHeader("Content-Type", "application/json")
@@ -184,8 +199,8 @@ class AccubusPreciseRemoteDataSourceTest {
 
     private fun roster(vararg items: String) = envelope("[${items.joinToString(",")}]")
 
-    private fun item(crfId: String, direction: String) = """
-        {"crfId":"$crfId","routeId":"route","moveDir":"$direction","arTime":"곧 도착","seq":5,"bsId":"nearby"}
+    private fun item(crfId: String, direction: String, sequence: Int = 5) = """
+        {"crfId":"$crfId","routeId":"route","moveDir":"$direction","arTime":"곧 도착","seq":$sequence,"bsId":"nearby"}
     """.trimIndent()
 
     private fun detail(

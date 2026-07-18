@@ -14,14 +14,14 @@ import org.w3c.dom.Element
 
 class FoundationContractTest {
     @Test
-    fun releaseVersionIs061() {
+    fun releaseVersionIs070() {
         val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
         }
         val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
 
-        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*7\\s*$").containsMatchIn(appBuild))
-        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.6\\.1\"\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*8\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.7\\.0\"\\s*$").containsMatchIn(appBuild))
     }
 
     @Test
@@ -97,16 +97,11 @@ class FoundationContractTest {
         val compactContent = functionBody(widget, "private fun CompactCommuteWidgetContent")
         val expandedContent = functionBody(widget, "private fun ExpandedCommuteWidgetContent")
         val cardModifier = functionBody(widget, "private fun widgetCardModifier")
-        val openActionSource = widget.substringAfter("class OpenCommuteMapAction")
-        val openAction = functionBody(openActionSource, "override suspend fun onAction")
-        assertTrue(compactContent.contains("Column(widgetCardModifier(state"))
-        assertTrue(expandedContent.contains("Column(widgetCardModifier(state"))
-        assertTrue(cardModifier.contains("actionRunCallback<OpenCommuteMapAction>"))
-        assertTrue(cardModifier.contains("OpenCommuteMapAction.slotKey to slot.name"))
+        assertTrue(compactContent.contains("Column(widgetCardModifier(context, state"))
+        assertTrue(expandedContent.contains("Column(widgetCardModifier(context, state"))
+        assertTrue(cardModifier.contains("actionStartActivity"))
+        assertTrue(cardModifier.contains("EXTRA_OPEN_FAVORITE_STOP_ID"))
         assertTrue(cardModifier.contains("modifier::clickable"))
-        assertTrue(openAction.contains("val slot = parameters[slotKey] ?: return"))
-        assertTrue(openAction.contains("Intent(context, MainActivity::class.java)"))
-        assertTrue(openAction.contains(".putExtra(MainActivity.EXTRA_OPEN_MAP_SLOT, slot)"))
     }
 
     @Test
@@ -160,12 +155,12 @@ class FoundationContractTest {
         assertTrue(manifest.contains("android:name=\"com.naver.maps.map.NCP_KEY_ID\""))
         assertTrue(manifest.contains("android:value=\"\${naverMapNcpKeyId}\""))
         assertFalse(manifest.contains("YOUR_NCP_KEY"))
-        assertFalse(manifest.contains("android.permission.ACCESS_FINE_LOCATION"))
-        assertFalse(manifest.contains("android.permission.ACCESS_COARSE_LOCATION"))
+        assertTrue(manifest.contains("android.permission.ACCESS_FINE_LOCATION"))
+        assertTrue(manifest.contains("android.permission.ACCESS_COARSE_LOCATION"))
     }
 
     @Test
-    fun dashboardNavigationTargetsRealtimeMap() {
+    fun stopNavigationTargetsStopCenteredRealtimeMap() {
         val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
         }
@@ -175,9 +170,9 @@ class FoundationContractTest {
             "app/src/main/kotlin/com/rafaam11/businfo/ui/BusAppViewModel.kt",
         ).readText()
 
-        assertTrue(app.contains("map/{slot}"))
-        assertFalse(app.contains("detail/{slot}"))
-        assertTrue(app.contains("realtimeMapViewModel.setVisible"))
+        assertTrue(app.contains("composable(\"stop\")"))
+        assertTrue(app.contains("NaverStopMap"))
+        assertTrue(app.contains("stopRealtimeMapViewModel.open"))
         assertFalse(dashboardViewModel.contains("detailState"))
         assertFalse(dashboardViewModel.contains("loadDetail"))
     }

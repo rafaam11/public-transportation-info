@@ -9,6 +9,7 @@ import com.rafaam11.businfo.data.GitHubUpdateRepository
 import com.rafaam11.businfo.data.RouteGeometryRepository
 import com.rafaam11.businfo.data.SharedPreferencesApiCallCounter
 import com.rafaam11.businfo.data.StopSearchRepository
+import com.rafaam11.businfo.data.PreciseVehicleSessionFactory
 import com.rafaam11.businfo.data.VehiclePositionRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
@@ -17,6 +18,7 @@ import com.rafaam11.businfo.data.local.MIGRATION_2_3
 import com.rafaam11.businfo.data.local.MIGRATION_3_4
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
 import com.rafaam11.businfo.data.local.RoomStopCenteredLocalDataSource
+import com.rafaam11.businfo.data.location.AndroidCurrentLocationDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import com.rafaam11.businfo.data.remote.AccubusPreciseRemoteDataSource
 import com.rafaam11.businfo.data.remote.OkHttpGitHubReleaseRemoteDataSource
@@ -27,10 +29,13 @@ import com.rafaam11.businfo.update.UpdateInstaller
 import com.rafaam11.businfo.widget.CommuteWidgetRepository
 import com.rafaam11.businfo.widget.CommuteWidgetUpdateNotifier
 import com.rafaam11.businfo.widget.WidgetPreferenceStore
+import com.rafaam11.businfo.widget.RoomStopWidgetStore
+import com.rafaam11.businfo.widget.StopWidgetRepository
 import java.time.Clock
 import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import kotlinx.coroutines.sync.Semaphore
 
 class AppGraph private constructor(context: Context) {
     private val clock = Clock.systemUTC()
@@ -52,12 +57,25 @@ class AppGraph private constructor(context: Context) {
         .build()
     private val local = RoomBusLocalDataSource(database.dao())
     val stopCenteredLocal = RoomStopCenteredLocalDataSource(database.stopCenteredDao())
-    val favoriteStopRepository = DefaultFavoriteStopRepository(stopCenteredLocal)
+    private val widgetNotifier = CommuteWidgetUpdateNotifier(context.applicationContext)
+    val favoriteStopRepository = DefaultFavoriteStopRepository(
+        stopCenteredLocal,
+        onChanged = widgetNotifier::notifyChanged,
+    )
     private val apiCallCounter = SharedPreferencesApiCallCounter(context.applicationContext)
     private val placeSearchDataSource = OkHttpPlaceSearchDataSource(
         httpClient,
         BuildConfig.PLACE_SEARCH_BASE_URL.takeIf(String::isNotBlank)?.toHttpUrl(),
     )
+    private val stopMapDetailSemaphore = Semaphore(4)
+    val preciseVehicleSessionFactory = PreciseVehicleSessionFactory {
+        AccubusPreciseRemoteDataSource(
+            client = httpClient,
+            baseUrl = "https://accubus.daegu.go.kr:8095/dbms_web_api/".toHttpUrl(),
+            clock = clock,
+            detailSemaphore = stopMapDetailSemaphore,
+        )
+    }
     val stopSearchRepository = StopSearchRepository(
         credentials,
         remote,
@@ -66,7 +84,14 @@ class AppGraph private constructor(context: Context) {
         placeSearchDataSource,
         apiCallCounter,
         clock,
+        widgetNotifier,
     )
+    val stopWidgetRepository = StopWidgetRepository(
+        RoomStopWidgetStore(stopCenteredLocal),
+        { stopId -> stopSearchRepository.refreshArrivals(stopId, force = true) },
+        clock,
+    )
+    val currentLocationDataSource = AndroidCurrentLocationDataSource(context.applicationContext)
     val widgetPreferences = WidgetPreferenceStore(context.applicationContext)
 
     val credentialRepository = BusRepository(credentials, remote)
@@ -75,7 +100,7 @@ class AppGraph private constructor(context: Context) {
         remote,
         local,
         clock,
-        CommuteWidgetUpdateNotifier(context.applicationContext),
+        widgetNotifier,
     )
     val commuteWidgetRepository = CommuteWidgetRepository(
         dashboardRepository,

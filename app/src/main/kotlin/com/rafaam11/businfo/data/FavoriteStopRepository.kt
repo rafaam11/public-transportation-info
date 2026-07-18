@@ -19,21 +19,29 @@ interface FavoriteStopRepository {
 class DefaultFavoriteStopRepository(
     private val local: StopCenteredLocalDataSource,
     private val maximumFavorites: Int = 20,
+    private val onChanged: suspend () -> Unit = {},
 ) : FavoriteStopRepository {
     private val writeMutex = Mutex()
 
     override fun observeFavorites(): Flow<List<FavoriteStop>> = local.observeFavoriteStops()
     override suspend fun favorite(id: FavoriteStopId): FavoriteStop? = local.favoriteStop(id)
 
-    override suspend fun save(stop: FavoriteStop): SaveFavoriteResult = writeMutex.withLock {
-        val existing = local.favoriteStopByStopId(stop.stopId)
-        if (existing != null && existing.id != stop.id) return@withLock SaveFavoriteResult.AlreadyExists
-        if (existing == null && local.favoriteStopCount() >= maximumFavorites) {
-            return@withLock SaveFavoriteResult.LimitReached
+    override suspend fun save(stop: FavoriteStop): SaveFavoriteResult {
+        val result = writeMutex.withLock {
+            val existing = local.favoriteStopByStopId(stop.stopId)
+            if (existing != null && existing.id != stop.id) return@withLock SaveFavoriteResult.AlreadyExists
+            if (existing == null && local.favoriteStopCount() >= maximumFavorites) {
+                return@withLock SaveFavoriteResult.LimitReached
+            }
+            local.saveFavoriteStop(stop)
+            SaveFavoriteResult.Saved
         }
-        local.saveFavoriteStop(stop)
-        SaveFavoriteResult.Saved
+        if (result == SaveFavoriteResult.Saved) onChanged()
+        return result
     }
 
-    override suspend fun delete(id: FavoriteStopId) = writeMutex.withLock { local.deleteFavoriteStop(id) }
+    override suspend fun delete(id: FavoriteStopId) {
+        writeMutex.withLock { local.deleteFavoriteStop(id) }
+        onChanged()
+    }
 }

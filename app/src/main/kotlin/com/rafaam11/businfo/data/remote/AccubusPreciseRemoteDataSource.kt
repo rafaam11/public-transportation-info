@@ -41,14 +41,19 @@ class AccubusPreciseRemoteDataSource(
     private val client: OkHttpClient,
     private val baseUrl: HttpUrl,
     private val clock: Clock,
+    private val detailSemaphore: Semaphore = Semaphore(MAX_DETAIL_CONCURRENCY),
 ) : PreciseVehiclePositionDataSource {
     private val stateLock = Any()
-    private val detailSemaphore = Semaphore(MAX_DETAIL_CONCURRENCY)
     private var activeSelection: SelectionKey? = null
     private var roster: List<RosterVehicle> = emptyList()
     private var rosterRefreshedAt: Instant? = null
+    private var targetStopSequence: Int? = null
     private val sessionIdentities = mutableMapOf<String, SessionIdentity>()
     private val positionCursors = mutableMapOf<String, String>()
+
+    override fun configureTargetStopSequence(sequence: Int?) {
+        synchronized(stateLock) { targetStopSequence = sequence }
+    }
 
     override suspend fun refreshRoster(
         selection: FavoriteSelection,
@@ -124,7 +129,10 @@ class AccubusPreciseRemoteDataSource(
         if (Duration.between(refreshedAt, clock.instant()).seconds > ROSTER_RETENTION_SECONDS) {
             return PreciseDataResult.Failure(BusDataError.ServiceUnavailable)
         }
-        val snapshot = rosterState.first
+        val targetSequence = synchronized(stateLock) { targetStopSequence }
+        val snapshot = rosterState.first.filter { vehicle ->
+            targetSequence == null || vehicle.stopSequence?.let { it <= targetSequence } == true
+        }
         val results = coroutineScope {
             snapshot.map { vehicle ->
                 async {
@@ -151,6 +159,7 @@ class AccubusPreciseRemoteDataSource(
             activeSelection = null
             roster = emptyList()
             rosterRefreshedAt = null
+            targetStopSequence = null
             sessionIdentities.clear()
             positionCursors.clear()
         }

@@ -16,7 +16,12 @@ sealed interface PreciseDataResult<out T> {
 }
 
 interface PreciseVehiclePositionDataSource {
+    fun configureTargetStopSequence(sequence: Int?) = Unit
     suspend fun refreshRoster(selection: FavoriteSelection): PreciseDataResult<PreciseRosterSnapshot>
     suspend fun refreshPositions(selection: FavoriteSelection): PreciseDataResult<PreciseVehicleBatch>
     fun closeSession()
+}
+
+fun interface PreciseVehicleSessionFactory {
+    fun create(): PreciseVehiclePositionDataSource
 }

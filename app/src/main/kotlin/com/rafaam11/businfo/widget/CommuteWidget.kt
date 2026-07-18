@@ -14,7 +14,6 @@ import androidx.glance.GlanceModifier
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -39,9 +38,6 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.rafaam11.businfo.AppGraph
 import com.rafaam11.businfo.MainActivity
-import com.rafaam11.businfo.domain.BusDataError
-import com.rafaam11.businfo.domain.CommuteSlot
-import com.rafaam11.businfo.ui.map.RoutePaletteResolver
 import java.time.Duration
 import java.time.Instant
 
@@ -52,164 +48,132 @@ class CommuteWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val state = AppGraph.get(context).commuteWidgetRepository.state(appWidgetId, Instant.now())
+        val state = AppGraph.get(context).stopWidgetRepository.state(appWidgetId)
         provideContent { CommuteWidgetContent(context, state) }
     }
 }
 
 @Composable
-private fun CommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
-    if (LocalSize.current.height < 150.dp) {
-        CompactCommuteWidgetContent(context, state)
-    } else {
-        ExpandedCommuteWidgetContent(context, state)
-    }
+private fun CommuteWidgetContent(context: Context, state: StopWidgetUiState) {
+    if (LocalSize.current.height < 150.dp) CompactCommuteWidgetContent(context, state)
+    else ExpandedCommuteWidgetContent(context, state)
 }
 
 @Composable
-private fun CompactCommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
-    val textColor = ColorProvider(Color(0xFF17212B))
-    val mutedColor = ColorProvider(Color(0xFF52606D))
-    Column(widgetCardModifier(state, padding = 8.dp, cornerRadius = 14.dp)) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                state.slot?.label ?: "버스 카드",
-                modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Bold),
-            )
-            Text(widgetStatusLabel(state, Instant.now()), style = TextStyle(color = mutedColor, fontSize = 9.sp))
-        }
-        Spacer(GlanceModifier.height(3.dp))
+private fun CompactCommuteWidgetContent(context: Context, state: StopWidgetUiState) {
+    Column(widgetCardModifier(context, state, 8.dp, 14.dp)) {
+        WidgetHeader(state, 11)
+        Spacer(GlanceModifier.height(5.dp))
         if (state.requiresConfiguration) {
-            Text("노선을 설정해 주세요", style = TextStyle(color = textColor, fontSize = 11.sp))
-            Spacer(GlanceModifier.defaultWeight())
-            Text(
-                "설정",
-                modifier = GlanceModifier.clickable(configureOrSetupAction(context, state)),
-                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 10.sp, fontWeight = FontWeight.Bold),
-            )
+            ConfigurationPrompt(context, state)
             return@Column
         }
-
-        val palette = RoutePaletteResolver.resolve(state.routeTypeCode)
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                state.routeNo.orEmpty(),
-                modifier = GlanceModifier
-                    .background(day = Color(palette.bodyColor), night = Color(palette.bodyColor))
-                    .cornerRadius(9.dp)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                style = TextStyle(
-                    color = ColorProvider(Color(palette.textColor)),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Text(
-                "  ${if (state.isRefreshing && state.primaryText.isBlank()) "불러오는 중…" else state.primaryText}",
-                modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Bold),
-            )
-        }
+        state.routes.take(2).forEach { WidgetRouteRow(it, compact = true) }
+        if (state.routes.isEmpty()) Text("현재 도착 예정 버스 없음", style = mutedStyle(10))
         Spacer(GlanceModifier.defaultWeight())
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text(
-                "${state.stopName.orEmpty()} · ${state.directionLabel.orEmpty()}",
-                modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = mutedColor, fontSize = 9.sp),
-            )
-            Text(
-                widgetActionLabel(state),
-                modifier = GlanceModifier.clickable(widgetAction(context, state)),
-                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 9.sp, fontWeight = FontWeight.Bold),
-            )
-        }
+        WidgetFooter(state)
     }
 }
 
 @Composable
-private fun ExpandedCommuteWidgetContent(context: Context, state: CommuteWidgetUiState) {
-    val textColor = ColorProvider(Color(0xFF17212B))
-    val mutedColor = ColorProvider(Color(0xFF52606D))
-    Column(widgetCardModifier(state, padding = 16.dp, cornerRadius = 18.dp)) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                state.slot?.label ?: "버스 카드",
-                modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold),
-            )
-            Text(
-                widgetStatusLabel(state, Instant.now()),
-                style = TextStyle(color = mutedColor, fontSize = 11.sp),
-            )
-        }
+private fun ExpandedCommuteWidgetContent(context: Context, state: StopWidgetUiState) {
+    Column(widgetCardModifier(context, state, 14.dp, 18.dp)) {
+        WidgetHeader(state, 14)
         Spacer(GlanceModifier.height(8.dp))
         if (state.requiresConfiguration) {
-            Text("노선을 설정해 주세요", style = TextStyle(color = textColor, fontSize = 16.sp))
-            Spacer(GlanceModifier.defaultWeight())
-            Text(
-                "설정",
-                modifier = GlanceModifier.clickable(configureOrSetupAction(context, state)),
-                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontWeight = FontWeight.Bold),
-            )
+            ConfigurationPrompt(context, state)
             return@Column
         }
-
-        val palette = RoutePaletteResolver.resolve(state.routeTypeCode)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                state.routeNo.orEmpty(),
-                modifier = GlanceModifier
-                    .background(day = Color(palette.bodyColor), night = Color(palette.bodyColor))
-                    .cornerRadius(12.dp)
-                    .padding(horizontal = 9.dp, vertical = 4.dp),
-                style = TextStyle(
-                    color = ColorProvider(Color(palette.textColor)),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Text(
-                "  ${state.directionLabel.orEmpty()}",
-                style = TextStyle(color = mutedColor, fontSize = 12.sp),
-            )
-        }
-        Spacer(GlanceModifier.height(7.dp))
-        Text(
-            if (state.isRefreshing && state.primaryText.isBlank()) "불러오는 중…" else state.primaryText,
-            style = TextStyle(color = textColor, fontSize = 23.sp, fontWeight = FontWeight.Bold),
-        )
-        state.secondaryText?.let {
-            Text(it, style = TextStyle(color = mutedColor, fontSize = 12.sp))
-        }
+        state.routes.take(4).forEach { WidgetRouteRow(it, compact = false) }
+        if (state.routes.isEmpty()) Text("현재 도착 예정 버스가 없습니다", style = mutedStyle(12))
         Spacer(GlanceModifier.defaultWeight())
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text(
-                "${state.stopName.orEmpty()} · ${state.directionLabel.orEmpty()}",
-                modifier = GlanceModifier.defaultWeight(),
-                style = TextStyle(color = mutedColor, fontSize = 11.sp),
-            )
-            Text(
-                widgetActionLabel(state),
-                modifier = GlanceModifier.clickable(widgetAction(context, state)),
-                style = TextStyle(color = ColorProvider(Color(0xFF005BAC)), fontSize = 12.sp, fontWeight = FontWeight.Bold),
-            )
-        }
+        WidgetFooter(state)
     }
 }
 
-private fun widgetCardModifier(state: CommuteWidgetUiState, padding: Dp, cornerRadius: Dp): GlanceModifier {
-    val openAction = state.slot?.let { slot ->
-        actionRunCallback<OpenCommuteMapAction>(
-            actionParametersOf(OpenCommuteMapAction.slotKey to slot.name),
+@Composable
+private fun WidgetHeader(state: StopWidgetUiState, fontSize: Int) {
+    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            state.stopName ?: "대구 버스 정류장",
+            modifier = GlanceModifier.defaultWeight(),
+            style = TextStyle(color = ink(), fontSize = fontSize.sp, fontWeight = FontWeight.Bold),
+            maxLines = 1,
+        )
+        Text(stopWidgetStatus(state, Instant.now()), style = mutedStyle((fontSize - 2).coerceAtLeast(8)))
+    }
+}
+
+@Composable
+private fun WidgetRouteRow(route: StopWidgetRouteUi, compact: Boolean) {
+    Row(
+        GlanceModifier.fillMaxWidth().padding(vertical = if (compact) 2.dp else 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            route.routeNo,
+            modifier = GlanceModifier.background(day = Color(0xFF1557C0), night = Color(0xFF1557C0)).cornerRadius(8.dp)
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+            style = TextStyle(color = ColorProvider(Color.White), fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold),
+        )
+        Text(
+            "  ${route.direction}",
+            modifier = GlanceModifier.defaultWeight(),
+            style = mutedStyle(if (compact) 9 else 11),
+            maxLines = 1,
+        )
+        Text(
+            route.arrivalText,
+            style = TextStyle(color = ink(), fontSize = if (compact) 12.sp else 15.sp, fontWeight = FontWeight.Bold),
         )
     }
-    return GlanceModifier
-        .fillMaxSize()
-        .background(day = Color(0xFFFFFCF5), night = Color(0xFFFFFCF5))
+}
+
+@Composable
+private fun WidgetFooter(state: StopWidgetUiState) {
+    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        Text(
+            state.fetchedAt?.let { elapsedLabel(it.toEpochMilli(), Instant.now()) } ?: "조회 전",
+            modifier = GlanceModifier.defaultWeight(),
+            style = mutedStyle(9),
+        )
+        Text(
+            if (state.isRefreshing) "새로고침 중…" else "새로고침",
+            modifier = GlanceModifier.clickable(actionRunCallback<RefreshStopWidgetAction>()),
+            style = TextStyle(color = ColorProvider(Color(0xFF1557C0)), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+        )
+    }
+}
+
+@Composable
+private fun ConfigurationPrompt(context: Context, state: StopWidgetUiState) {
+    Text("정류장을 설정해 주세요", style = TextStyle(color = ink(), fontSize = 13.sp, fontWeight = FontWeight.Bold))
+    Spacer(GlanceModifier.height(8.dp))
+    Text(
+        "설정",
+        modifier = GlanceModifier.clickable(configurationAction(context, state.appWidgetId)),
+        style = TextStyle(color = ColorProvider(Color(0xFF1557C0)), fontSize = 11.sp, fontWeight = FontWeight.Bold),
+    )
+}
+
+private fun widgetCardModifier(
+    context: Context,
+    state: StopWidgetUiState,
+    padding: Dp,
+    cornerRadius: Dp,
+): GlanceModifier {
+    val open = state.favoriteStopId?.let { favoriteId ->
+        actionStartActivity(
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN_FAVORITE_STOP_ID, favoriteId.value),
+        )
+    }
+    return GlanceModifier.fillMaxSize()
+        .background(day = Color(0xFFFFFCF7), night = Color(0xFFFFFCF7))
         .cornerRadius(cornerRadius)
         .padding(padding)
-        .let { modifier -> openAction?.let(modifier::clickable) ?: modifier }
+        .let { modifier -> open?.let(modifier::clickable) ?: modifier }
 }
 
 private fun configurationAction(context: Context, appWidgetId: Int): Action = actionStartActivity(
@@ -217,24 +181,22 @@ private fun configurationAction(context: Context, appWidgetId: Int): Action = ac
         .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
 )
 
-private fun configureOrSetupAction(context: Context, state: CommuteWidgetUiState): Action =
-    state.slot?.let { slot ->
-        actionRunCallback<OpenCommuteSetupAction>(actionParametersOf(OpenCommuteSetupAction.slotKey to slot.name))
-    } ?: configurationAction(context, state.appWidgetId)
-
-private fun widgetAction(context: Context, state: CommuteWidgetUiState): Action =
-    if (state.refreshError == BusDataError.InvalidCredential) {
-        actionStartActivity(
-            Intent(context, WidgetKeySettingsActivity::class.java),
-        )
-    } else {
-        actionRunCallback<RefreshCommuteWidgetAction>()
+class RefreshStopWidgetAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        try {
+            AppGraph.get(context).stopWidgetRepository.refresh(appWidgetId)
+        } finally {
+            CommuteWidget().update(context, glanceId)
+        }
     }
+}
 
-private fun widgetActionLabel(state: CommuteWidgetUiState): String = when {
-    state.refreshError == BusDataError.InvalidCredential -> "API 키 변경"
-    state.isRefreshing -> "새로고침 중…"
-    else -> "새로고침"
+private fun stopWidgetStatus(state: StopWidgetUiState, now: Instant): String = when {
+    state.refreshFailed -> "갱신 실패"
+    state.isRefreshing -> "업데이트 중"
+    state.fetchedAt == null -> "조회 전"
+    else -> elapsedLabel(state.fetchedAt.toEpochMilli(), now)
 }
 
 internal fun widgetStatusLabel(state: CommuteWidgetUiState, now: Instant): String = when {
@@ -245,53 +207,9 @@ internal fun widgetStatusLabel(state: CommuteWidgetUiState, now: Instant): Strin
 }
 
 private fun elapsedLabel(epochMillis: Long?, now: Instant): String {
-    val seconds = epochMillis?.let { at ->
-        Duration.between(Instant.ofEpochMilli(at), now).seconds.coerceAtLeast(0)
-    } ?: 0
+    val seconds = epochMillis?.let { Duration.between(Instant.ofEpochMilli(it), now).seconds.coerceAtLeast(0) } ?: 0
     return if (seconds < 60) "${seconds}초 전" else "${seconds / 60}분 전"
 }
 
-class RefreshCommuteWidgetAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
-        try {
-            AppGraph.get(context).commuteWidgetRepository.refresh(appWidgetId) {
-                CommuteWidget().update(context, glanceId)
-            }
-        } finally {
-            // Always re-render, even if refresh() threw — otherwise the widget stays stuck
-            // on the "새로고침 중…" frame drawn by onStarted() above.
-            CommuteWidget().update(context, glanceId)
-        }
-    }
-}
-
-class OpenCommuteMapAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val slot = parameters[slotKey] ?: return
-        context.startActivity(
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(MainActivity.EXTRA_OPEN_MAP_SLOT, slot),
-        )
-    }
-
-    companion object {
-        val slotKey = ActionParameters.Key<String>("commute-slot")
-    }
-}
-
-class OpenCommuteSetupAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val slot = parameters[slotKey] ?: return
-        context.startActivity(
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(MainActivity.EXTRA_OPEN_SETUP_SLOT, slot),
-        )
-    }
-
-    companion object {
-        val slotKey = ActionParameters.Key<String>("commute-slot")
-    }
-}
+private fun ink() = ColorProvider(Color(0xFF17212B))
+private fun mutedStyle(fontSize: Int) = TextStyle(color = ColorProvider(Color(0xFF52606D)), fontSize = fontSize.sp)

@@ -13,6 +13,7 @@ ksp = "2.3.10"
 navigation = "2.9.8"
 naverMap = "3.23.3"
 glance = "1.1.1"
+work = "2.11.2"
 serialization = "1.8.1"
 
 [libraries]
@@ -37,6 +38,7 @@ room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
 naver-map = { module = "com.naver.maps:map-sdk", version.ref = "naverMap" }
 glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
+work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
 kotlinx-serialization-bom = { module = "org.jetbrains.kotlinx:kotlinx-serialization-bom", version.ref = "serialization" }
 
 [plugins]

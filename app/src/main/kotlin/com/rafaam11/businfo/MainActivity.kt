@@ -11,6 +11,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.naver.maps.map.NaverMapSdk
 import com.rafaam11.businfo.ui.BusAppViewModel
 import com.rafaam11.businfo.ui.RealtimeMapViewModel
+import com.rafaam11.businfo.ui.StopHomeViewModel
+import com.rafaam11.businfo.ui.StopRealtimeMapViewModel
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.widget.KeySettingsRequestStore
 import java.io.File
@@ -21,6 +23,7 @@ class MainActivity : ComponentActivity() {
     private val openMapSlot = MutableStateFlow<CommuteSlot?>(null)
     private val openSetupSlot = MutableStateFlow<CommuteSlot?>(null)
     private val openKeySettings = MutableStateFlow(false)
+    private val openFavoriteStopId = MutableStateFlow<String?>(null)
     private val keySettingsRequests by lazy { KeySettingsRequestStore(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,12 +54,26 @@ class MainActivity : ComponentActivity() {
                         Clock.systemUTC(),
                     ) as T
                 }
+                modelClass.isAssignableFrom(StopHomeViewModel::class.java) -> {
+                    StopHomeViewModel(
+                        graph.favoriteStopRepository,
+                        graph.stopSearchRepository,
+                    ) as T
+                }
+                modelClass.isAssignableFrom(StopRealtimeMapViewModel::class.java) -> {
+                    StopRealtimeMapViewModel(
+                        graph.stopSearchRepository,
+                        graph.preciseVehicleSessionFactory,
+                        Clock.systemUTC(),
+                    ) as T
+                }
                 else -> error("Unsupported ViewModel ${modelClass.name}")
             }
         }
         val provider = ViewModelProvider(this, factory)
         val busViewModel = provider[BusAppViewModel::class.java]
-        val realtimeMapViewModel = provider[RealtimeMapViewModel::class.java]
+        val stopHomeViewModel = provider[StopHomeViewModel::class.java]
+        val stopRealtimeMapViewModel = provider[StopRealtimeMapViewModel::class.java]
 
         val onInstallUpdate: (File) -> Unit = { file ->
             val intent = if (graph.updateInstaller.canRequestInstall()) {
@@ -71,9 +88,17 @@ class MainActivity : ComponentActivity() {
             val mapSlot by openMapSlot.collectAsState()
             val setupSlot by openSetupSlot.collectAsState()
             val keySettings by openKeySettings.collectAsState()
+            val favoriteStopId by openFavoriteStopId.collectAsState()
             BusInfoApp(
                 viewModel = busViewModel,
-                realtimeMapViewModel = realtimeMapViewModel,
+                stopHomeViewModel = stopHomeViewModel,
+                stopRealtimeMapViewModel = stopRealtimeMapViewModel,
+                currentLocation = graph.currentLocationDataSource,
+                openFavoriteStopId = favoriteStopId,
+                onOpenFavoriteStopConsumed = {
+                    intent.removeExtra(EXTRA_OPEN_FAVORITE_STOP_ID)
+                    openFavoriteStopId.value = null
+                },
                 openMapSlot = mapSlot,
                 onOpenMapSlotConsumed = {
                     intent.removeExtra(EXTRA_OPEN_MAP_SLOT)
@@ -107,10 +132,12 @@ class MainActivity : ComponentActivity() {
             runCatching { CommuteSlot.valueOf(name) }.getOrNull()
         }
         openKeySettings.value = keySettingsRequests.consume()
+        openFavoriteStopId.value = intent?.getStringExtra(EXTRA_OPEN_FAVORITE_STOP_ID)
     }
 
     companion object {
         const val EXTRA_OPEN_MAP_SLOT = "com.rafaam11.businfo.extra.OPEN_MAP_SLOT"
         const val EXTRA_OPEN_SETUP_SLOT = "com.rafaam11.businfo.extra.OPEN_SETUP_SLOT"
+        const val EXTRA_OPEN_FAVORITE_STOP_ID = "com.rafaam11.businfo.extra.OPEN_FAVORITE_STOP_ID"
     }
 }
