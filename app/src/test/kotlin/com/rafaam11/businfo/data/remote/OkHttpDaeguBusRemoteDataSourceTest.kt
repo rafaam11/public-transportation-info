@@ -100,6 +100,18 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         assertEquals("/getBasic02", server.takeRequest().requestUrl!!.encodedPath)
     }
 
+    @Test fun basicResponseMapsCitywideStopCatalog() = runTest {
+        server.enqueue(MockResponse().setBody(BASIC_STOPS_SUCCESS))
+
+        val result = source.stopCatalog("secret") as RemoteResult.Success
+
+        assertEquals(listOf("stop-a", "stop-b"), result.value.map { it.stopId })
+        assertEquals("효동초등학교건너", result.value.first().stopName)
+        assertEquals(128.61, result.value.first().longitude, 0.0)
+        assertEquals(35.81, result.value.first().latitude, 0.0)
+        assertEquals("/getBasic02", server.takeRequest().requestUrl!!.encodedPath)
+    }
+
     @Test fun routeStopsMapStringSequencesAndDirection() = runTest {
         server.enqueue(MockResponse().setBody(STOPS_SUCCESS))
 
@@ -161,6 +173,18 @@ class OkHttpDaeguBusRemoteDataSourceTest {
         val url = server.takeRequest().requestUrl!!
         assertEquals("stop-a", url.queryParameter("bsId"))
         assertEquals("814", url.queryParameter("routeNo"))
+    }
+
+    @Test fun stopRealtimeRequestReturnsEveryRouteWithoutRouteNumberQuery() = runTest {
+        server.enqueue(MockResponse().setBody(ALL_ROUTE_ARRIVALS_SUCCESS))
+
+        val result = source.stopArrivals("secret", "stop-a") as RemoteResult.Success
+
+        assertEquals(listOf("급행5", "814", "814"), result.value.map { it.routeNo })
+        assertEquals(listOf(30, 61, 487), result.value.map { it.arrivalSeconds })
+        val url = server.takeRequest().requestUrl!!
+        assertEquals(setOf("serviceKey", "bsId"), url.queryParameterNames)
+        assertEquals("stop-a", url.queryParameter("bsId"))
     }
 
     @Test fun partiallyValidVehicleItemsDiscardOnlyInvalidRows() = runTest {
@@ -337,6 +361,12 @@ class OkHttpDaeguBusRemoteDataSourceTest {
              "stNm":"대구대학교","edNm":"범물동","dirRouteNote":"범물동 방면","ndirRouteNote":"대구대 방면","routeTCd":"1"}],
              "bs":[],"node":[],"link":[]}}}
         """
+        const val BASIC_STOPS_SUCCESS = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":2,"items":{"route":[],"bs":[
+             {"bsId":"stop-a","bsNm":"효동초등학교건너","xPos":128.61,"yPos":35.81},
+             {"bsId":"stop-b","bsNm":"동대구역","xPos":"128.62","yPos":"35.82"}],"node":[]}}}
+        """
         const val STOPS_SUCCESS = """
             {"header":{"resultCode":"0000","resultMsg":"success","success":true},
              "body":{"totalCount":1,"items":[{"bsId":"stop-a","bsNm":"효동초등학교건너",
@@ -348,6 +378,15 @@ class OkHttpDaeguBusRemoteDataSourceTest {
              {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":7,"arrTime":487,"arrState":"9분"},
              {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":2,"arrTime":61,"arrState":""},
              {"routeId":"other","routeNo":"999","moveDir":"0","bsGap":1,"arrTime":30,"arrState":"곧 도착"}]}]}}
+        """
+        const val ALL_ROUTE_ARRIVALS_SUCCESS = """
+            {"header":{"resultCode":"0000","resultMsg":"success","success":true},
+             "body":{"totalCount":3,"items":[
+             {"routeNo":"814","arrList":[
+             {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":7,"arrTime":487,"arrState":"9분"},
+             {"routeId":"3000814001","routeNo":"814","moveDir":"0","bsGap":2,"arrTime":61,"arrState":""}]},
+             {"routeNo":"급행5","arrList":[
+             {"routeId":"3000500001","routeNo":"급행5","moveDir":"1","bsGap":1,"arrTime":30,"arrState":"곧 도착"}]}]}}
         """
         const val FAILURE_HEADER = """
             {"header":{"resultCode":"9003","resultMsg":"error","success":false},

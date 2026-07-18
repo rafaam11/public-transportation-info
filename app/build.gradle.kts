@@ -4,6 +4,11 @@ val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
 }
 val naverMapNcpKeyId = localProperties.getProperty("NAVER_MAP_NCP_KEY_ID").orEmpty()
+val placeSearchBaseUrl = System.getenv("PLACE_SEARCH_BASE_URL")
+    ?.takeIf(String::isNotBlank)
+    ?: localProperties.getProperty("PLACE_SEARCH_BASE_URL").orEmpty()
+
+fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 // 환경변수(CI) 우선, 없으면 local.properties(로컬 개발자용).
 fun releaseSigningProperty(name: String): String? =
@@ -39,6 +44,7 @@ android {
         versionName = "0.6.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["naverMapNcpKeyId"] = naverMapNcpKeyId
+        buildConfigField("String", "PLACE_SEARCH_BASE_URL", placeSearchBaseUrl.asBuildConfigString())
     }
 
     signingConfigs {

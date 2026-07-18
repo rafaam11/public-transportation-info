@@ -7,6 +7,8 @@ import com.rafaam11.businfo.data.DashboardRepository
 import com.rafaam11.businfo.data.DefaultFavoriteStopRepository
 import com.rafaam11.businfo.data.GitHubUpdateRepository
 import com.rafaam11.businfo.data.RouteGeometryRepository
+import com.rafaam11.businfo.data.SharedPreferencesApiCallCounter
+import com.rafaam11.businfo.data.StopSearchRepository
 import com.rafaam11.businfo.data.VehiclePositionRepository
 import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
@@ -18,6 +20,7 @@ import com.rafaam11.businfo.data.local.RoomStopCenteredLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import com.rafaam11.businfo.data.remote.AccubusPreciseRemoteDataSource
 import com.rafaam11.businfo.data.remote.OkHttpGitHubReleaseRemoteDataSource
+import com.rafaam11.businfo.data.remote.OkHttpPlaceSearchDataSource
 import com.rafaam11.businfo.ui.map.MapAuthMonitor
 import com.rafaam11.businfo.update.AndroidUpdateDownloader
 import com.rafaam11.businfo.update.UpdateInstaller
@@ -50,6 +53,20 @@ class AppGraph private constructor(context: Context) {
     private val local = RoomBusLocalDataSource(database.dao())
     val stopCenteredLocal = RoomStopCenteredLocalDataSource(database.stopCenteredDao())
     val favoriteStopRepository = DefaultFavoriteStopRepository(stopCenteredLocal)
+    private val apiCallCounter = SharedPreferencesApiCallCounter(context.applicationContext)
+    private val placeSearchDataSource = OkHttpPlaceSearchDataSource(
+        httpClient,
+        BuildConfig.PLACE_SEARCH_BASE_URL.takeIf(String::isNotBlank)?.toHttpUrl(),
+    )
+    val stopSearchRepository = StopSearchRepository(
+        credentials,
+        remote,
+        stopCenteredLocal,
+        local,
+        placeSearchDataSource,
+        apiCallCounter,
+        clock,
+    )
     val widgetPreferences = WidgetPreferenceStore(context.applicationContext)
 
     val credentialRepository = BusRepository(credentials, remote)
