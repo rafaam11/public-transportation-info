@@ -51,4 +51,35 @@ class BusDatabaseMigrationTest {
             }
         }
     }
+
+    @Test fun migration3To4ClearsCommuteRowsAndPreservesReusableCaches() {
+        helper.createDatabase("migration-3-4", 3).apply {
+            execSQL(
+                "INSERT INTO routes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arrayOf("route", "814", "대구대", "범물동", "범물동 방면", "대구대 방면", "1"),
+            )
+            execSQL(
+                "INSERT INTO favorites VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                arrayOf("MORNING", "route", "814", "0", "범물동 방면", "stop", "진천역", "1"),
+            )
+            execSQL("INSERT INTO arrival_snapshots VALUES (?, ?, ?)", arrayOf<Any>("MORNING", "[]", 100L))
+            execSQL("INSERT INTO route_geometries VALUES (?, ?, ?, ?)", arrayOf<Any>("route", "0", "[]", 100L))
+            close()
+        }
+
+        helper.runMigrationsAndValidate("migration-3-4", 4, true, MIGRATION_3_4).use { db ->
+            assertEquals(0, db.count("favorites"))
+            assertEquals(0, db.count("arrival_snapshots"))
+            assertEquals(1, db.count("routes"))
+            assertEquals(1, db.count("route_geometries"))
+            assertEquals(0, db.count("favorite_stops"))
+            assertEquals(0, db.count("widget_bindings"))
+        }
+    }
+
+    private fun androidx.sqlite.db.SupportSQLiteDatabase.count(table: String): Int =
+        query("SELECT COUNT(*) FROM `$table`").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            cursor.getInt(0)
+        }
 }

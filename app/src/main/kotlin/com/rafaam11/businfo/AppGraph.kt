@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.rafaam11.businfo.data.BusRepository
 import com.rafaam11.businfo.data.DashboardRepository
+import com.rafaam11.businfo.data.DefaultFavoriteStopRepository
 import com.rafaam11.businfo.data.GitHubUpdateRepository
 import com.rafaam11.businfo.data.RouteGeometryRepository
 import com.rafaam11.businfo.data.VehiclePositionRepository
@@ -11,7 +12,9 @@ import com.rafaam11.businfo.data.credential.SharedPreferencesCredentialStore
 import com.rafaam11.businfo.data.local.BusDatabase
 import com.rafaam11.businfo.data.local.MIGRATION_1_2
 import com.rafaam11.businfo.data.local.MIGRATION_2_3
+import com.rafaam11.businfo.data.local.MIGRATION_3_4
 import com.rafaam11.businfo.data.local.RoomBusLocalDataSource
+import com.rafaam11.businfo.data.local.RoomStopCenteredLocalDataSource
 import com.rafaam11.businfo.data.remote.OkHttpDaeguBusRemoteDataSource
 import com.rafaam11.businfo.data.remote.AccubusPreciseRemoteDataSource
 import com.rafaam11.businfo.data.remote.OkHttpGitHubReleaseRemoteDataSource
@@ -42,9 +45,11 @@ class AppGraph private constructor(context: Context) {
     )
 
     private val database = Room.databaseBuilder(context.applicationContext, BusDatabase::class.java, "bus-info.db")
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
     private val local = RoomBusLocalDataSource(database.dao())
+    val stopCenteredLocal = RoomStopCenteredLocalDataSource(database.stopCenteredDao())
+    val favoriteStopRepository = DefaultFavoriteStopRepository(stopCenteredLocal)
     val widgetPreferences = WidgetPreferenceStore(context.applicationContext)
 
     val credentialRepository = BusRepository(credentials, remote)
