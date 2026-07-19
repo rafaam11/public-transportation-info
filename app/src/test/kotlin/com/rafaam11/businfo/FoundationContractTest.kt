@@ -14,14 +14,14 @@ import org.w3c.dom.Element
 
 class FoundationContractTest {
     @Test
-    fun releaseVersionIs071() {
+    fun releaseVersionIs072() {
         val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
         }
         val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
 
-        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*9\\s*$").containsMatchIn(appBuild))
-        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.7\\.1\"\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*10\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.7\\.2\"\\s*$").containsMatchIn(appBuild))
     }
 
     @Test

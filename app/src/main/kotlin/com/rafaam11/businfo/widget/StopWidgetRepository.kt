@@ -88,15 +88,23 @@ class StopWidgetRepository(
         failed -= appWidgetId
     }
 
-    suspend fun refresh(appWidgetId: Int): StopWidgetRefreshResult {
+    suspend fun refresh(
+        appWidgetId: Int,
+        onStarted: suspend () -> Unit = {},
+    ): StopWidgetRefreshResult {
         val lock = locks.computeIfAbsent(appWidgetId) { Mutex() }
         if (!lock.tryLock()) return StopWidgetRefreshResult.AlreadyRunning
         return try {
             val binding = store.binding(appWidgetId) ?: return StopWidgetRefreshResult.RequiresConfiguration
             val favorite = store.favorite(binding.favoriteStopId) ?: return StopWidgetRefreshResult.RequiresConfiguration
             refreshing += appWidgetId
-            val result = refresher(favorite.stopId)
-            result.onSuccess { store.saveSnapshot(it); failed -= appWidgetId }
+            failed -= appWidgetId
+            runCatching { onStarted() }
+            val result = runCatching {
+                val snapshot = refresher(favorite.stopId).getOrThrow()
+                store.saveSnapshot(snapshot)
+            }
+            result.onSuccess { failed -= appWidgetId }
                 .onFailure { failed += appWidgetId }
             if (result.isSuccess) StopWidgetRefreshResult.Success else StopWidgetRefreshResult.Failed
         } finally {

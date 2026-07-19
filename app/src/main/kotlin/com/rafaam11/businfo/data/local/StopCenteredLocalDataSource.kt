@@ -2,6 +2,7 @@ package com.rafaam11.businfo.data.local
 
 import com.rafaam11.businfo.domain.FavoriteStop
 import com.rafaam11.businfo.domain.FavoriteStopId
+import com.rafaam11.businfo.domain.FavoriteRemovalSnapshot
 import com.rafaam11.businfo.domain.StopArrivalSnapshot
 import com.rafaam11.businfo.domain.StopCatalogItem
 import com.rafaam11.businfo.domain.WidgetBinding
@@ -13,7 +14,8 @@ interface StopCenteredLocalDataSource {
     suspend fun favoriteStopByStopId(stopId: String): FavoriteStop?
     suspend fun favoriteStopCount(): Int
     suspend fun saveFavoriteStop(stop: FavoriteStop)
-    suspend fun deleteFavoriteStop(id: FavoriteStopId)
+    suspend fun removeFavoriteStop(id: FavoriteStopId): FavoriteRemovalSnapshot?
+    suspend fun restoreFavoriteStop(snapshot: FavoriteRemovalSnapshot)
 
     suspend fun replaceStopCatalog(stops: List<StopCatalogItem>)
     suspend fun stops(): List<StopCatalogItem>

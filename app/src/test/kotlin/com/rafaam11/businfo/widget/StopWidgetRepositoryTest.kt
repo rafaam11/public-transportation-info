@@ -11,12 +11,16 @@ import com.rafaam11.businfo.domain.WidgetBinding
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class StopWidgetRepositoryTest {
     private val now = Instant.parse("2026-07-18T10:00:00Z")
     private val favoriteId = FavoriteStopId("favorite-1")
@@ -50,6 +54,65 @@ class StopWidgetRepositoryTest {
         assertEquals(StopWidgetRefreshResult.Success, repository.refresh(7))
         assertEquals("stop-1", refreshedStop)
         assertEquals(now.plusSeconds(5), store.snapshot?.fetchedAt)
+    }
+
+    @Test fun `refresh start callback observes refreshing before network completion`() = runTest {
+        val store = FakeStopWidgetStore(favorite, snapshot).apply { binding = WidgetBinding(7, favoriteId, now) }
+        val releaseNetwork = CompletableDeferred<Unit>()
+        var refreshingAtCallback = false
+        val repository = StopWidgetRepository(
+            store,
+            { releaseNetwork.await(); Result.success(snapshot.copy(fetchedAt = now.plusSeconds(5))) },
+            Clock.fixed(now, ZoneOffset.UTC),
+        )
+
+        val refresh = async {
+            repository.refresh(7, onStarted = {
+                refreshingAtCallback = repository.state(7).isRefreshing
+            })
+        }
+        runCurrent()
+
+        assertTrue(refreshingAtCallback)
+        assertTrue(repository.state(7).isRefreshing)
+
+        releaseNetwork.complete(Unit)
+        assertEquals(StopWidgetRefreshResult.Success, refresh.await())
+        assertFalse(repository.state(7).isRefreshing)
+    }
+
+    @Test fun `retry clears prior failure while refresh is running`() = runTest {
+        val store = FakeStopWidgetStore(favorite, snapshot).apply { binding = WidgetBinding(7, favoriteId, now) }
+        var shouldFail = true
+        var failureVisibleAtRetryStart = true
+        val repository = StopWidgetRepository(
+            store,
+            { if (shouldFail) Result.failure(IllegalStateException("offline")) else Result.success(snapshot) },
+            Clock.fixed(now, ZoneOffset.UTC),
+        )
+        assertEquals(StopWidgetRefreshResult.Failed, repository.refresh(7))
+        assertTrue(repository.state(7).refreshFailed)
+
+        shouldFail = false
+        repository.refresh(7, onStarted = {
+            failureVisibleAtRetryStart = repository.state(7).refreshFailed
+        })
+
+        assertFalse(failureVisibleAtRetryStart)
+        assertFalse(repository.state(7).refreshFailed)
+    }
+
+    @Test fun `thrown refresh failure clears progress and remains retryable`() = runTest {
+        val store = FakeStopWidgetStore(favorite, snapshot).apply { binding = WidgetBinding(7, favoriteId, now) }
+        val repository = StopWidgetRepository(
+            store,
+            { throw IllegalStateException("network broke") },
+            Clock.fixed(now, ZoneOffset.UTC),
+        )
+
+        assertEquals(StopWidgetRefreshResult.Failed, repository.refresh(7))
+        assertFalse(repository.state(7).isRefreshing)
+        assertTrue(repository.state(7).refreshFailed)
     }
 
     private fun group(routeId: String, routeNo: String, seconds: Int) = StopArrivalGroup(

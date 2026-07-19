@@ -127,7 +127,8 @@ class StopSearchRepositoryTest {
         override suspend fun favoriteStopByStopId(stopId: String): FavoriteStop? = null
         override suspend fun favoriteStopCount() = 0
         override suspend fun saveFavoriteStop(stop: FavoriteStop) = Unit
-        override suspend fun deleteFavoriteStop(id: FavoriteStopId) = Unit
+        override suspend fun removeFavoriteStop(id: FavoriteStopId) = null
+        override suspend fun restoreFavoriteStop(snapshot: com.rafaam11.businfo.domain.FavoriteRemovalSnapshot) = Unit
         override suspend fun replaceStopCatalog(stops: List<StopCatalogItem>) { stopValues.clear(); stopValues.addAll(stops) }
         override suspend fun stops() = stopValues.toList()
         override suspend fun searchStops(query: String, limit: Int) = stopValues.filter {

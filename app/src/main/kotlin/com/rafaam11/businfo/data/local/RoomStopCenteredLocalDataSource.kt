@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.rafaam11.businfo.domain.FavoriteStop
 import com.rafaam11.businfo.domain.FavoriteStopId
+import com.rafaam11.businfo.domain.FavoriteRemovalSnapshot
 import com.rafaam11.businfo.domain.GeoPoint
 import com.rafaam11.businfo.domain.PinnedRoute
 import com.rafaam11.businfo.domain.RouteDirectionKey
@@ -36,7 +37,21 @@ class RoomStopCenteredLocalDataSource(
         stop.pinnedRoutes.map { it.toEntity() },
     )
 
-    override suspend fun deleteFavoriteStop(id: FavoriteStopId) = dao.deleteStopCenteredFavorite(id.value)
+    override suspend fun removeFavoriteStop(id: FavoriteStopId): FavoriteRemovalSnapshot? =
+        dao.removeStopCenteredFavorite(id.value)?.let { snapshot ->
+            FavoriteRemovalSnapshot(
+                favorite = snapshot.favorite.toDomain(snapshot.pinnedRoutes),
+                widgetBindings = snapshot.widgetBindings.map { it.toDomain() },
+            )
+        }
+
+    override suspend fun restoreFavoriteStop(snapshot: FavoriteRemovalSnapshot) = dao.restoreStopCenteredFavorite(
+        FavoriteRemovalEntities(
+            favorite = snapshot.favorite.toEntity(),
+            pinnedRoutes = snapshot.favorite.pinnedRoutes.map { it.toEntity() },
+            widgetBindings = snapshot.widgetBindings.map { it.toEntity() },
+        ),
+    )
 
     override suspend fun replaceStopCatalog(stops: List<StopCatalogItem>) = dao.replaceStops(stops.map { it.toEntity() })
     override suspend fun stops(): List<StopCatalogItem> = dao.stops().map { it.toDomain() }
@@ -112,6 +127,12 @@ class RoomStopCenteredLocalDataSource(
         appWidgetId,
         FavoriteStopId(favoriteStopId),
         Instant.ofEpochMilli(configuredAtEpochMillis),
+    )
+
+    private fun WidgetBinding.toEntity() = WidgetBindingEntity(
+        appWidgetId,
+        favoriteStopId.value,
+        configuredAt.toEpochMilli(),
     )
 
     private companion object {

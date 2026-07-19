@@ -115,6 +115,12 @@ data class WidgetBindingEntity(
     val configuredAtEpochMillis: Long,
 )
 
+data class FavoriteRemovalEntities(
+    val favorite: FavoriteStopEntity,
+    val pinnedRoutes: List<FavoritePinnedRouteEntity>,
+    val widgetBindings: List<WidgetBindingEntity>,
+)
+
 @Dao
 abstract class BusDao {
     @Query("SELECT * FROM routes") abstract suspend fun routes(): List<RouteEntity>
@@ -215,10 +221,22 @@ abstract class StopCenteredDao {
     @Query("DELETE FROM widget_bindings WHERE favoriteStopId = :favoriteStopId")
     abstract suspend fun deleteWidgetBindingsForFavorite(favoriteStopId: String)
 
-    @Transaction open suspend fun deleteStopCenteredFavorite(id: String) {
+    @Query("SELECT * FROM widget_bindings WHERE favoriteStopId = :favoriteStopId")
+    abstract suspend fun widgetBindingsForFavorite(favoriteStopId: String): List<WidgetBindingEntity>
+
+    @Transaction open suspend fun removeStopCenteredFavorite(id: String): FavoriteRemovalEntities? {
+        val favorite = favoriteStop(id) ?: return null
+        val snapshot = FavoriteRemovalEntities(favorite, pinnedRoutes(id), widgetBindingsForFavorite(id))
         deleteWidgetBindingsForFavorite(id)
         clearPinnedRoutes(id)
         deleteFavoriteStopRow(id)
+        return snapshot
+    }
+
+    @Transaction open suspend fun restoreStopCenteredFavorite(snapshot: FavoriteRemovalEntities) {
+        saveFavoriteStop(snapshot.favorite)
+        replacePinnedRoutes(snapshot.favorite.id, snapshot.pinnedRoutes)
+        snapshot.widgetBindings.forEach { saveWidgetBinding(it) }
     }
 }
 

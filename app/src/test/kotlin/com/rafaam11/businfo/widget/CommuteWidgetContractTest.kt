@@ -33,7 +33,9 @@ class CommuteWidgetContractTest {
         assertTrue(configuration.contains("ComponentName(this, CommuteWidgetReceiver::class.java)"))
         assertTrue(configuration.contains("setResult(Activity.RESULT_CANCELED)"))
         assertTrue(configuration.contains("if (!ownership.isOwned())"))
-        assertTrue(configuration.contains("if (!ownership.runIfOwned { persistChoice(favorite) })"))
+        assertTrue(configuration.contains("if (!ownership.runIfOwned { configurationViewModel.choose(favorite) })"))
+        assertTrue(configuration.contains("private fun completeConfiguration()"))
+        assertTrue(configuration.contains("if (!ownership.isOwned())"))
     }
 
     @Test

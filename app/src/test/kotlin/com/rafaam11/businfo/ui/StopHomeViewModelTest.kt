@@ -6,6 +6,7 @@ import com.rafaam11.businfo.data.SaveFavoriteResult
 import com.rafaam11.businfo.data.StopSearchGateway
 import com.rafaam11.businfo.domain.FavoriteStop
 import com.rafaam11.businfo.domain.FavoriteStopId
+import com.rafaam11.businfo.domain.FavoriteRemovalSnapshot
 import com.rafaam11.businfo.domain.GeoPoint
 import com.rafaam11.businfo.domain.NearbyStopResult
 import com.rafaam11.businfo.domain.RouteDirectionKey
@@ -62,7 +63,7 @@ class StopHomeViewModelTest {
         assertEquals("동대구", viewModel.uiState.value.query)
         assertEquals(listOf(stop), viewModel.uiState.value.searchResult.stops)
         assertFalse(viewModel.uiState.value.nearbyLoading)
-        assertTrue(viewModel.uiState.value.message!!.contains("권한"))
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("권한"))
     }
 
     @Test fun `nearby lookup exposes progress and honest unavailable message`() = runTest {
@@ -78,8 +79,8 @@ class StopHomeViewModelTest {
         viewModel.locationUnavailable(requestId)
 
         assertFalse(viewModel.uiState.value.nearbyLoading)
-        assertTrue(viewModel.uiState.value.message!!.contains("현재 위치"))
-        assertFalse(viewModel.uiState.value.message!!.contains("권한 없이도"))
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("현재 위치"))
+        assertFalse(viewModel.uiState.value.feedbackEvents.single().message.contains("권한 없이도"))
     }
 
     @Test fun `adding searched stop creates a stable favorite`() = runTest {
@@ -92,6 +93,117 @@ class StopHomeViewModelTest {
 
         assertEquals("s1", favorites.values.single().stopId)
         assertFalse(favorites.values.single().id.value.isBlank())
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("추가했습니다"))
+    }
+
+    @Test fun `removing favorite queues undo and restores the complete favorite`() = runTest {
+        val original = favorite(stop).copy(
+            pinnedRoutes = listOf(
+                com.rafaam11.businfo.domain.PinnedRoute(
+                    FavoriteStopId("favorite-s1"),
+                    RouteDirectionKey("r1", "0"),
+                    "814",
+                    "정방향",
+                    0,
+                ),
+            ),
+        )
+        val favorites = FakeFavorites(listOf(original))
+        val viewModel = StopHomeViewModel(favorites, FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.deleteFavorite(original.id)
+        advanceUntilIdle()
+
+        assertTrue(favorites.values.isEmpty())
+        val event = viewModel.uiState.value.feedbackEvents.single()
+        assertTrue(event is UiFeedbackEvent.FavoriteRemoved)
+
+        viewModel.resolveFeedback(event.id, actionPerformed = true)
+        advanceUntilIdle()
+
+        assertEquals(original, favorites.values.single())
+        assertTrue(viewModel.uiState.value.feedbackEvents.isEmpty())
+    }
+
+    @Test fun `pending removal keeps its slot reserved until undo is resolved`() = runTest {
+        val originals = (0 until 20).map { index ->
+            FavoriteStop(
+                FavoriteStopId("favorite-$index"),
+                "stop-$index",
+                "정류장 $index",
+                GeoPoint(128.6, 35.8),
+                index,
+            )
+        }
+        val favorites = FakeFavorites(originals)
+        val viewModel = StopHomeViewModel(favorites, FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.deleteFavorite(originals.first().id)
+        advanceUntilIdle()
+        viewModel.addFavorite(StopCatalogItem("new-stop", "새 정류장", 128.7, 35.9))
+        advanceUntilIdle()
+
+        assertEquals(19, favorites.values.size)
+        assertTrue(viewModel.uiState.value.feedbackEvents.last().message.contains("최대 20개"))
+    }
+
+    @Test fun `automatic refresh stays quiet and manual refresh announces success`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.refreshStop(stop.stopId)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.feedbackEvents.isEmpty())
+
+        viewModel.refreshStopManually(stop.stopId)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("갱신했습니다"))
+        assertTrue(viewModel.uiState.value.manualRefreshingStopIds.isEmpty())
+    }
+
+    @Test fun `manual refresh exception clears progress and announces failure`() = runTest {
+        val search = FakeSearch().apply { refreshFailure = IllegalStateException("network broke") }
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), search, StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.refreshStopManually(stop.stopId)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.manualRefreshingStopIds.isEmpty())
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("실패했습니다"))
+    }
+
+    @Test fun `favorite save exception clears progress and announces failure`() = runTest {
+        val favorites = FakeFavorites(emptyList()).apply {
+            saveFailure = IllegalStateException("database broke")
+        }
+        val viewModel = StopHomeViewModel(favorites, FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        viewModel.addFavorite(stop)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.favoriteMutatingStopIds.isEmpty())
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("저장하지 못했습니다"))
+    }
+
+    @Test fun `finishing a changed reorder session announces persistence once`() = runTest {
+        val second = StopCatalogItem("s2", "두 번째", 128.7, 35.9)
+        val viewModel = StopHomeViewModel(
+            FakeFavorites(listOf(favorite(stop), favorite(second).copy(sortOrder = 1))),
+            FakeSearch(),
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+
+        viewModel.toggleReorderMode()
+        viewModel.moveFavorite(FavoriteStopId("favorite-s2"), -1)
+        advanceUntilIdle()
+        viewModel.toggleReorderMode()
+
+        assertEquals("즐겨찾기 순서를 저장했습니다", viewModel.uiState.value.feedbackEvents.single().message)
     }
 
     @Test fun `cached arrival is visible immediately after process restart`() = runTest {
@@ -125,7 +237,7 @@ class StopHomeViewModelTest {
         advanceUntilIdle()
 
         assertEquals(2, search.ensureCalls)
-        assertEquals(null, viewModel.uiState.value.message)
+        assertTrue(viewModel.uiState.value.feedbackEvents.isEmpty())
         assertFalse(viewModel.uiState.value.catalogPreparing)
     }
 
@@ -143,11 +255,15 @@ class StopHomeViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf(group.key), favorites.values.single().pinnedRoutes.map { it.key })
+        val pinnedEvent = viewModel.uiState.value.feedbackEvents.single()
+        assertTrue(pinnedEvent.message.contains("고정했습니다"))
+        viewModel.resolveFeedback(pinnedEvent.id, actionPerformed = false)
 
         viewModel.togglePinnedRoute(stop.stopId, group)
         advanceUntilIdle()
 
         assertTrue(favorites.values.single().pinnedRoutes.isEmpty())
+        assertTrue(viewModel.uiState.value.feedbackEvents.single().message.contains("해제했습니다"))
     }
 
     @Test fun `starting a search leaves nearby results`() = runTest {
@@ -249,29 +365,43 @@ class StopHomeViewModelTest {
 
     private class FakeFavorites(initial: List<FavoriteStop>) : FavoriteStopRepository {
         val values = initial.toMutableList()
+        var saveFailure: Throwable? = null
         private val flow = MutableStateFlow(values.toList())
         override fun observeFavorites(): Flow<List<FavoriteStop>> = flow
         override suspend fun favorite(id: FavoriteStopId) = values.firstOrNull { it.id == id }
         override suspend fun save(stop: FavoriteStop): SaveFavoriteResult {
+            saveFailure?.let { throw it }
             values.removeAll { it.id == stop.id }; values += stop; flow.value = values.toList()
             return SaveFavoriteResult.Saved
         }
-        override suspend fun delete(id: FavoriteStopId) { values.removeAll { it.id == id }; flow.value = values.toList() }
+        override suspend fun remove(id: FavoriteStopId): FavoriteRemovalSnapshot? {
+            val favorite = values.firstOrNull { it.id == id } ?: return null
+            values.removeAll { it.id == id }
+            flow.value = values.toList()
+            return FavoriteRemovalSnapshot(favorite, emptyList())
+        }
+        override suspend fun restore(snapshot: FavoriteRemovalSnapshot) {
+            values.removeAll { it.id == snapshot.favorite.id }
+            values += snapshot.favorite
+            flow.value = values.toList()
+        }
     }
 
     private open class FakeSearch : StopSearchGateway {
         var result = GroupedSearchResult(emptyList(), emptyList(), emptyList())
         var cachedArrival: StopArrivalSnapshot? = null
         var ensureResult: Result<Unit> = Result.success(Unit)
+        var refreshFailure: Throwable? = null
         var ensureCalls = 0
         override suspend fun ensureStopCatalog(force: Boolean): Result<Unit> {
             ensureCalls++
             return ensureResult
         }
         override suspend fun search(rawQuery: String) = result
-        override suspend fun refreshArrivals(stopId: String, force: Boolean) = Result.success(
-            StopArrivalSnapshot(stopId, emptyList(), Instant.EPOCH),
-        )
+        override suspend fun refreshArrivals(stopId: String, force: Boolean): Result<StopArrivalSnapshot> {
+            refreshFailure?.let { throw it }
+            return Result.success(StopArrivalSnapshot(stopId, emptyList(), Instant.EPOCH))
+        }
         override suspend fun cachedArrivals(stopId: String) = cachedArrival
         override suspend fun nearby(origin: GeoPoint): NearbyStopResult = NearbyStopResult(emptyList(), 500)
         override suspend fun routeStops(routeId: String): Result<List<RouteStop>> = Result.success(emptyList())

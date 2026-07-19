@@ -3,6 +3,7 @@ package com.rafaam11.businfo.data
 import com.rafaam11.businfo.data.local.StopCenteredLocalDataSource
 import com.rafaam11.businfo.domain.FavoriteStop
 import com.rafaam11.businfo.domain.FavoriteStopId
+import com.rafaam11.businfo.domain.FavoriteRemovalSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -13,7 +14,8 @@ interface FavoriteStopRepository {
     fun observeFavorites(): Flow<List<FavoriteStop>>
     suspend fun favorite(id: FavoriteStopId): FavoriteStop?
     suspend fun save(stop: FavoriteStop): SaveFavoriteResult
-    suspend fun delete(id: FavoriteStopId)
+    suspend fun remove(id: FavoriteStopId): FavoriteRemovalSnapshot?
+    suspend fun restore(snapshot: FavoriteRemovalSnapshot)
 }
 
 class DefaultFavoriteStopRepository(
@@ -40,8 +42,14 @@ class DefaultFavoriteStopRepository(
         return result
     }
 
-    override suspend fun delete(id: FavoriteStopId) {
-        writeMutex.withLock { local.deleteFavoriteStop(id) }
+    override suspend fun remove(id: FavoriteStopId): FavoriteRemovalSnapshot? {
+        val snapshot = writeMutex.withLock { local.removeFavoriteStop(id) }
+        if (snapshot != null) onChanged()
+        return snapshot
+    }
+
+    override suspend fun restore(snapshot: FavoriteRemovalSnapshot) {
+        writeMutex.withLock { local.restoreFavoriteStop(snapshot) }
         onChanged()
     }
 }

@@ -38,6 +38,7 @@ import com.rafaam11.businfo.data.location.LocationPermissionMissingException
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.StopCatalogItem
 import com.rafaam11.businfo.ui.AppUiState
+import com.rafaam11.businfo.ui.AppFeedbackHost
 import com.rafaam11.businfo.ui.BusAppViewModel
 import com.rafaam11.businfo.ui.KeyEntryScreen
 import com.rafaam11.businfo.ui.StopDetailScreen
@@ -67,6 +68,7 @@ fun BusInfoApp(
     val appState by viewModel.uiState.collectAsState()
     val homeState by stopHomeViewModel.uiState.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
+    val appFeedbackEvents by viewModel.feedbackEvents.collectAsState()
     val stopMapState by stopRealtimeMapViewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -138,10 +140,11 @@ fun BusInfoApp(
             error = Color(0xFFB3261E),
         ),
     ) {
-        when (val current = appState) {
-            AppUiState.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            is AppUiState.NeedsKey -> KeyEntryScreen(current, viewModel::submitKey)
-            is AppUiState.Ready -> {
+        Box(Modifier.fillMaxSize()) {
+            when (val current = appState) {
+                AppUiState.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                is AppUiState.NeedsKey -> KeyEntryScreen(current, viewModel::submitKey, viewModel::cancelKeyChange)
+                is AppUiState.Ready -> {
                 val nav = rememberNavController()
                 LaunchedEffect(openFavoriteStopId, homeState.favorites) {
                     val favorite = homeState.favorites.firstOrNull { it.id.value == openFavoriteStopId }
@@ -175,20 +178,19 @@ fun BusInfoApp(
                             onRoute = stopHomeViewModel::selectRoute,
                             onBackFromRoute = stopHomeViewModel::clearSelectedRoute,
                             onBackFromNearby = stopHomeViewModel::clearNearby,
-                            onFavorite = stopHomeViewModel::addFavorite,
+                            onToggleFavorite = stopHomeViewModel::toggleFavorite,
                             onDeleteFavorite = { stopHomeViewModel.deleteFavorite(it.id) },
                             onMoveFavorite = { favorite, offset -> stopHomeViewModel.moveFavorite(favorite.id, offset) },
                             onToggleReorder = stopHomeViewModel::toggleReorderMode,
                             onRefreshStop = stopHomeViewModel::refreshStop,
                             onRefreshCatalog = stopHomeViewModel::refreshCatalog,
                             onChangeKey = viewModel::beginKeyChange,
-                            onCheckUpdate = viewModel::checkForUpdatesOnce,
+                            onCheckUpdate = viewModel::checkForUpdatesManually,
                             onDownloadUpdate = viewModel::downloadUpdate,
                             onInstallUpdate = onInstallUpdate,
                             onOpenReleases = {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL)))
                             },
-                            onConsumeMessage = stopHomeViewModel::consumeMessage,
                         )
                     }
                     composable("stop") {
@@ -204,11 +206,15 @@ fun BusInfoApp(
                                 stop = stop,
                                 snapshot = homeState.arrivals[stop.stopId],
                                 isFavorite = favorite != null,
+                                favoriteBusy = stop.stopId in homeState.favoriteMutatingStopIds ||
+                                    stop.stopId in homeState.pendingRemovalStopIds,
+                                manualRefreshing = stop.stopId in homeState.manualRefreshingStopIds,
                                 pinnedRoutes = favorite?.pinnedRoutes?.map { it.key }?.toSet().orEmpty(),
                                 onBack = nav::popBackStack,
-                                onFavorite = { stopHomeViewModel.addFavorite(stop) },
+                                onFavorite = { stopHomeViewModel.toggleFavorite(stop) },
                                 onTogglePinnedRoute = { group -> stopHomeViewModel.togglePinnedRoute(stop.stopId, group) },
-                                onRefresh = { stopHomeViewModel.refreshStop(stop.stopId, force = true) },
+                                onAutoRefresh = { stopHomeViewModel.refreshStop(stop.stopId, force = true) },
+                                onManualRefresh = { stopHomeViewModel.refreshStopManually(stop.stopId) },
                                 highlightedRoute = stopMapState.highlightedRoute,
                                 routeErrors = stopMapState.routeErrors.keys,
                                 onHighlightRoute = stopRealtimeMapViewModel::highlight,
@@ -243,7 +249,22 @@ fun BusInfoApp(
                         }
                     }
                 }
+                }
             }
+            val homeFeedback = homeState.feedbackEvents.firstOrNull()
+            val appFeedback = appFeedbackEvents.firstOrNull()
+            val activeFeedback = homeFeedback ?: appFeedback
+            AppFeedbackHost(
+                events = listOfNotNull(activeFeedback),
+                onResolved = { eventId, actionPerformed ->
+                    if (homeFeedback != null) {
+                        stopHomeViewModel.resolveFeedback(eventId, actionPerformed)
+                    } else {
+                        viewModel.consumeFeedback(eventId)
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }

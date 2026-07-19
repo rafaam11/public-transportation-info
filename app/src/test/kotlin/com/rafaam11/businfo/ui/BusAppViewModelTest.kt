@@ -84,6 +84,23 @@ class BusAppViewModelTest {
         assertFalse(credential.clearCalled)
     }
 
+    @Test fun `cancelling key replacement returns to ready with the saved key`() = runTest {
+        val credential = FakeCredential(true)
+        val viewModel = BusAppViewModel(
+            credential, FakeDashboard(), FakeUpdateRepository(), FakeUpdateDownloader(),
+            StandardTestDispatcher(testScheduler),
+        )
+        advanceUntilIdle()
+
+        viewModel.beginKeyChange()
+        viewModel.cancelKeyChange()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is AppUiState.Ready)
+        assertTrue(credential.hasKey)
+        assertFalse(credential.clearCalled)
+    }
+
     @Test fun `catalog retry forces a new basic sync`() = runTest {
         val dashboard = FakeDashboard()
         val viewModel = BusAppViewModel(
@@ -130,6 +147,7 @@ class BusAppViewModelTest {
         assertEquals(1, updates.checkCalls)
         val state = viewModel.updateState.value as UpdateUiState.Available
         assertEquals(info, state.info)
+        assertTrue(viewModel.feedbackEvents.value.isEmpty())
     }
 
     @Test fun `manual recheck reuses the same trigger`() = runTest {
@@ -140,11 +158,12 @@ class BusAppViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.checkForUpdatesOnce()
+        viewModel.checkForUpdatesManually()
         advanceUntilIdle()
 
         assertEquals(2, updates.checkCalls)
         assertEquals(UpdateUiState.UpToDate, viewModel.updateState.value)
+        assertEquals("최신 버전을 사용하고 있습니다", viewModel.feedbackEvents.value.single().message)
     }
 
     @Test fun `downloading an update surfaces the downloaded file`() = runTest {
@@ -163,6 +182,7 @@ class BusAppViewModelTest {
 
         val state = viewModel.updateState.value as UpdateUiState.Available
         assertTrue(state.download is DownloadUiState.Downloaded)
+        assertTrue(viewModel.feedbackEvents.value.single().message.contains("다운로드했습니다"))
     }
 
     private class FakeCredential(

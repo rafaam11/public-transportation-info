@@ -19,11 +19,14 @@ class StopWidgetBootstrapWorker(
     override suspend fun doWork(): Result {
         val appWidgetId = inputData.getInt(APP_WIDGET_ID, -1)
         if (appWidgetId < 0) return Result.failure()
-        AppGraph.get(applicationContext).stopWidgetRepository.refresh(appWidgetId)
-        runCatching {
-            val glanceId = GlanceAppWidgetManager(applicationContext).getGlanceIdBy(appWidgetId)
-            CommuteWidget().update(applicationContext, glanceId)
+        val glanceId = runCatching {
+            GlanceAppWidgetManager(applicationContext).getGlanceIdBy(appWidgetId)
+        }.getOrNull()
+        val widget = CommuteWidget()
+        AppGraph.get(applicationContext).stopWidgetRepository.refresh(appWidgetId) {
+            glanceId?.let { widget.update(applicationContext, it) }
         }
+        runCatching { glanceId?.let { widget.update(applicationContext, it) } }
         return Result.success()
     }
 

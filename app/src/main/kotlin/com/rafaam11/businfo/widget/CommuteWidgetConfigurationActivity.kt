@@ -19,17 +19,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.rafaam11.businfo.AppGraph
 import com.rafaam11.businfo.domain.FavoriteStop
 import kotlinx.coroutines.launch
@@ -37,6 +46,7 @@ import kotlinx.coroutines.launch
 class CommuteWidgetConfigurationActivity : ComponentActivity() {
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     private lateinit var ownership: WidgetOwnershipGuard
+    private lateinit var configurationViewModel: WidgetConfigurationViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,28 +57,42 @@ class CommuteWidgetConfigurationActivity : ComponentActivity() {
             finish()
             return
         }
-        val favorites = AppGraph.get(applicationContext).favoriteStopRepository.observeFavorites()
+        val graph = AppGraph.get(applicationContext)
+        val favorites = graph.favoriteStopRepository.observeFavorites()
+        configurationViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = WidgetConfigurationViewModel(
+                bindFavorite = { favorite -> graph.stopWidgetRepository.bind(appWidgetId, favorite.id) },
+            ) as T
+        })[WidgetConfigurationViewModel::class.java]
         setContent {
             MaterialTheme {
                 val values by favorites.collectAsState(initial = emptyList())
-                ConfigurationContent(values, ::choose)
+                val state by configurationViewModel.uiState.collectAsState()
+                LaunchedEffect(state.completedFavoriteId) {
+                    if (state.completedFavoriteId != null) completeConfiguration()
+                }
+                ConfigurationContent(values, state, ::choose)
             }
         }
     }
 
     private fun choose(favorite: FavoriteStop) {
-        if (!ownership.runIfOwned { persistChoice(favorite) }) finish()
+        if (!ownership.runIfOwned { configurationViewModel.choose(favorite) }) finish()
     }
 
-    private fun persistChoice(favorite: FavoriteStop) {
+    private fun completeConfiguration() {
+        if (!ownership.isOwned()) {
+            finish()
+            return
+        }
         lifecycleScope.launch {
-            val graph = AppGraph.get(applicationContext)
-            graph.stopWidgetRepository.bind(appWidgetId, favorite.id)
             val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(Activity.RESULT_OK, result)
             val glanceId = GlanceAppWidgetManager(applicationContext).getGlanceIdBy(appWidgetId)
             CommuteWidget().update(applicationContext, glanceId)
             StopWidgetBootstrapWorker.enqueue(applicationContext, appWidgetId)
+            configurationViewModel.consumeCompletion()
             finish()
         }
     }
@@ -92,7 +116,11 @@ internal class WidgetOwnershipGuard(
 }
 
 @Composable
-private fun ConfigurationContent(favorites: List<FavoriteStop>, onChoose: (FavoriteStop) -> Unit) {
+private fun ConfigurationContent(
+    favorites: List<FavoriteStop>,
+    state: WidgetConfigurationUiState,
+    onChoose: (FavoriteStop) -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("위젯 정류장 선택", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
@@ -102,15 +130,29 @@ private fun ConfigurationContent(favorites: List<FavoriteStop>, onChoose: (Favor
             if (favorites.isEmpty()) item {
                 Text("앱에서 정류장을 먼저 즐겨찾기에 저장해 주세요", color = MaterialTheme.colorScheme.error)
             }
+            state.errorMessage?.let { message ->
+                item { Text(message, color = MaterialTheme.colorScheme.error) }
+            }
             items(favorites, key = { it.id.value }) { favorite ->
                 Card(
-                    Modifier.fillMaxWidth().clickable { onChoose(favorite) },
+                    Modifier.fillMaxWidth().clickable(enabled = !state.isBinding) { onChoose(favorite) },
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF2F5F7)),
                     shape = RoundedCornerShape(16.dp),
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(favorite.stopName, fontWeight = FontWeight.Bold)
-                        Text(favorite.stopId, style = MaterialTheme.typography.bodySmall)
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(favorite.stopName, fontWeight = FontWeight.Bold)
+                            Text(favorite.stopId, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (state.bindingFavoriteId == favorite.id) {
+                            Spacer(Modifier.width(10.dp))
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("연결 중")
+                        }
                     }
                 }
             }

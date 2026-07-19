@@ -40,8 +40,8 @@ android {
         applicationId = "com.rafaam11.businfo"
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.7.1"
+        versionCode = 10
+        versionName = "0.7.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["naverMapNcpKeyId"] = naverMapNcpKeyId
         buildConfigField("String", "PLACE_SEARCH_BASE_URL", placeSearchBaseUrl.asBuildConfigString())

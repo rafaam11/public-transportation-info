@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.rafaam11.businfo.domain.CommuteSlot
@@ -155,9 +157,20 @@ private fun ConfiguredCommuteCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KeyEntryScreen(state: AppUiState.NeedsKey, onSubmit: (String) -> Unit) {
+fun KeyEntryScreen(
+    state: AppUiState.NeedsKey,
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit = {},
+) {
     var key by remember { mutableStateOf("") }
-    Scaffold(topBar = { TopAppBar(title = { Text(if (state.changeMode) "대구 버스 API 키 변경" else "대구 버스 API 연결") }) }) { padding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text(if (state.changeMode) "대구 버스 API 키 변경" else "대구 버스 API 연결") },
+            navigationIcon = {
+                if (state.changeMode) TextButton(onClick = onCancel, enabled = !state.submitting) { Text("취소") }
+            },
+        )
+    }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("공공데이터 API 키 입력", style = MaterialTheme.typography.headlineSmall)
             Text("공공데이터포털(data.go.kr)에서 \"대구광역시_대구버스정보시스템\" 서비스를 활용신청하고, 승인 후 발급되는 일반 인증키의 Decoding 값을 입력하세요.")
@@ -170,7 +183,8 @@ fun KeyEntryScreen(state: AppUiState.NeedsKey, onSubmit: (String) -> Unit) {
             OutlinedTextField(
                 value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text("API 키") },
                 singleLine = true, enabled = !state.submitting, visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (key.isNotBlank() && !state.submitting) onSubmit(key) }),
             )
             Button(onClick = { onSubmit(key) }, modifier = Modifier.fillMaxWidth(), enabled = key.isNotBlank() && !state.submitting) {
                 Text(if (state.submitting) "키 확인 중" else if (state.changeMode) "새 키 확인하고 변경" else "키 저장하고 시작")

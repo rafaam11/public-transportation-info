@@ -100,6 +100,11 @@ data class WidgetBinding(
     val configuredAt: Instant,
 )
 
+data class FavoriteRemovalSnapshot(
+    val favorite: FavoriteStop,
+    val widgetBindings: List<WidgetBinding>,
+)
+
 fun List<StopArrival>.groupByRouteDirection(): List<StopArrivalGroup> =
     groupBy(StopArrival::key)
         .map { (key, values) ->

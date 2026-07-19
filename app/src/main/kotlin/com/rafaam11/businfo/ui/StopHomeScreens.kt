@@ -22,8 +22,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -37,8 +40,6 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +56,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,7 +104,7 @@ fun StopHomeScreen(
     onRoute: (RouteSummary) -> Unit,
     onBackFromRoute: () -> Unit,
     onBackFromNearby: () -> Unit,
-    onFavorite: (StopCatalogItem) -> Unit,
+    onToggleFavorite: (StopCatalogItem) -> Unit,
     onDeleteFavorite: (FavoriteStop) -> Unit,
     onMoveFavorite: (FavoriteStop, Int) -> Unit,
     onToggleReorder: () -> Unit,
@@ -110,17 +115,9 @@ fun StopHomeScreen(
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: (File) -> Unit,
     onOpenReleases: () -> Unit,
-    onConsumeMessage: () -> Unit,
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
-    val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbar.showSnackbar(it)
-            onConsumeMessage()
-        }
-    }
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
@@ -130,11 +127,12 @@ fun StopHomeScreen(
                 locationGranted = locationGranted,
                 placeSearchConfigured = placeSearchConfigured,
                 apiCallCount = state.apiCallCount,
+                catalogPreparing = state.catalogPreparing,
                 updateState = updateState,
                 onToggleReorder = { onToggleReorder(); scope.launch { drawer.close() } },
-                onRefreshCatalog = { onRefreshCatalog(); scope.launch { drawer.close() } },
+                onRefreshCatalog = onRefreshCatalog,
                 onChangeKey = { onChangeKey(); scope.launch { drawer.close() } },
-                onCheckUpdate = { onCheckUpdate(); scope.launch { drawer.close() } },
+                onCheckUpdate = onCheckUpdate,
                 onDownloadUpdate = onDownloadUpdate,
                 onInstallUpdate = onInstallUpdate,
                 onOpenReleases = onOpenReleases,
@@ -143,7 +141,6 @@ fun StopHomeScreen(
     ) {
         Scaffold(
             containerColor = Mist,
-            snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 StopSearchBar(
                     query = state.query,
@@ -174,14 +171,16 @@ fun StopHomeScreen(
                     origin = state.nearbyOrigin,
                     onBack = onBackFromNearby,
                     onStop = onStop,
-                    onFavorite = onFavorite,
+                    favorites = state.favorites,
+                    busyStopIds = state.favoriteMutatingStopIds + state.pendingRemovalStopIds,
+                    onToggleFavorite = onToggleFavorite,
                     modifier = Modifier.padding(padding),
                 )
                 state.query.isNotBlank() -> SearchContent(
                     state = state,
                     onRoute = onRoute,
                     onStop = onStop,
-                    onFavorite = onFavorite,
+                    onToggleFavorite = onToggleFavorite,
                     onPlace = onPlace,
                     modifier = Modifier.padding(padding),
                 )
@@ -205,6 +204,7 @@ private fun StopSearchBar(
     onMenu: () -> Unit,
     onNearby: () -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Surface(color = Color.White, shadowElevation = 5.dp) {
         Row(
             Modifier
@@ -216,7 +216,11 @@ private fun StopSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = onMenu, contentPadding = PaddingValues(8.dp)) {
+            TextButton(
+                onClick = onMenu,
+                modifier = Modifier.semantics { contentDescription = "메뉴 열기" },
+                contentPadding = PaddingValues(8.dp),
+            ) {
                 Text("☰", style = MaterialTheme.typography.headlineSmall, color = Ink)
             }
             OutlinedTextField(
@@ -226,6 +230,17 @@ private fun StopSearchBar(
                 placeholder = { Text("버스 · 정류장 · 장소 검색", maxLines = 1) },
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                trailingIcon = if (query.isNotBlank()) {
+                    {
+                        TextButton(
+                            onClick = { onQuery(""); focusManager.clearFocus() },
+                            modifier = Modifier.semantics { contentDescription = "검색어 지우기" },
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                        ) { Text("지우기") }
+                    }
+                } else null,
             )
             Button(
                 onClick = onNearby,
@@ -257,16 +272,28 @@ private fun FavoriteHomeContent(
             }
         }
         if (state.catalogPreparing) item { LinearStatus("대구 정류장 정보를 준비하고 있습니다") }
+        if (state.reorderMode) item {
+            Surface(color = TransitBlue.copy(alpha = 0.09f), shape = RoundedCornerShape(14.dp)) {
+                Text(
+                    "순서 편집 중 · 화살표로 즐겨찾기 순서를 바꾼 뒤 메뉴에서 편집을 끝내세요",
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    color = TransitBlue,
+                )
+            }
+        }
         if (state.favorites.isEmpty()) {
             item {
                 EmptyFavoriteCard()
             }
         }
-        items(state.favorites.sortedBy(FavoriteStop::sortOrder), key = { it.id.value }) { favorite ->
+        val orderedFavorites = state.favorites.sortedBy(FavoriteStop::sortOrder)
+        itemsIndexed(orderedFavorites, key = { _, favorite -> favorite.id.value }) { index, favorite ->
             FavoriteStopCard(
                 favorite = favorite,
                 snapshot = state.arrivals[favorite.stopId],
                 reorderMode = state.reorderMode,
+                canMoveUp = index > 0,
+                canMoveDown = index < orderedFavorites.lastIndex,
                 onOpen = {
                     onStop(StopCatalogItem(favorite.stopId, favorite.stopName, favorite.point.longitude, favorite.point.latitude))
                 },
@@ -283,6 +310,8 @@ private fun FavoriteStopCard(
     favorite: FavoriteStop,
     snapshot: StopArrivalSnapshot?,
     reorderMode: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onMove: (Int) -> Unit,
@@ -312,8 +341,16 @@ private fun FavoriteStopCard(
                 Spacer(Modifier.width(9.dp))
                 Text(favorite.stopName, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
                 if (reorderMode) {
-                    TextButton(onClick = { onMove(-1) }) { Text("↑") }
-                    TextButton(onClick = { onMove(1) }) { Text("↓") }
+                    TextButton(
+                        onClick = { onMove(-1) },
+                        enabled = canMoveUp,
+                        modifier = Modifier.semantics { contentDescription = "위로 이동" },
+                    ) { Text("↑") }
+                    TextButton(
+                        onClick = { onMove(1) },
+                        enabled = canMoveDown,
+                        modifier = Modifier.semantics { contentDescription = "아래로 이동" },
+                    ) { Text("↓") }
                 } else TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFF7A4A42)) }
             }
             if (snapshot == null) {
@@ -346,7 +383,7 @@ private fun SearchContent(
     state: StopHomeUiState,
     onRoute: (RouteSummary) -> Unit,
     onStop: (StopCatalogItem) -> Unit,
-    onFavorite: (StopCatalogItem) -> Unit,
+    onToggleFavorite: (StopCatalogItem) -> Unit,
     onPlace: (PlaceResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -371,7 +408,14 @@ private fun SearchContent(
         if (state.searchResult.stops.isNotEmpty()) {
             item { SectionTitle("정류장", state.searchResult.stops.size) }
             items(state.searchResult.stops, key = { it.stopId }) { stop ->
-                StopResultCard(stop, null, onStop, onFavorite)
+                StopResultCard(
+                    stop = stop,
+                    distance = null,
+                    isFavorite = state.favorites.any { it.stopId == stop.stopId },
+                    busy = stop.stopId in state.favoriteMutatingStopIds || stop.stopId in state.pendingRemovalStopIds,
+                    onStop = onStop,
+                    onToggleFavorite = onToggleFavorite,
+                )
             }
         }
         if (state.searchResult.places.isNotEmpty()) {
@@ -399,7 +443,9 @@ private fun NearbyContent(
     origin: GeoPoint?,
     onBack: () -> Unit,
     onStop: (StopCatalogItem) -> Unit,
-    onFavorite: (StopCatalogItem) -> Unit,
+    favorites: List<FavoriteStop>,
+    busyStopIds: Set<String>,
+    onToggleFavorite: (StopCatalogItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -417,7 +463,14 @@ private fun NearbyContent(
         }
         if (stops.isEmpty()) item { EmptyResult("주변에서 정류장을 찾지 못했습니다") }
         items(stops, key = { it.stop.stopId }) { nearby ->
-            StopResultCard(nearby.stop, "${nearby.distanceMeters}m", onStop, onFavorite)
+            StopResultCard(
+                stop = nearby.stop,
+                distance = "${nearby.distanceMeters}m",
+                isFavorite = favorites.any { it.stopId == nearby.stop.stopId },
+                busy = nearby.stop.stopId in busyStopIds,
+                onStop = onStop,
+                onToggleFavorite = onToggleFavorite,
+            )
         }
     }
 }
@@ -459,8 +512,10 @@ private fun RouteStopsContent(
 private fun StopResultCard(
     stop: StopCatalogItem,
     distance: String?,
+    isFavorite: Boolean,
+    busy: Boolean,
     onStop: (StopCatalogItem) -> Unit,
-    onFavorite: (StopCatalogItem) -> Unit,
+    onToggleFavorite: (StopCatalogItem) -> Unit,
 ) {
     ResultCard(onClick = { onStop(stop) }) {
         Box(Modifier.size(34.dp).background(TransitGreen.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
@@ -471,7 +526,21 @@ private fun StopResultCard(
             Text(stop.stopName, fontWeight = FontWeight.Bold)
             Text(listOfNotNull(distance, stop.stopId.takeIf(String::isNotBlank)).joinToString(" · "), color = Color(0xFF65717D))
         }
-        TextButton(onClick = { onFavorite(stop) }) { Text("☆ 저장") }
+        TextButton(
+            onClick = { onToggleFavorite(stop) },
+            enabled = !busy,
+            modifier = Modifier.semantics {
+                contentDescription = if (isFavorite) "${stop.stopName} 즐겨찾기 해제" else "${stop.stopName} 즐겨찾기 저장"
+            },
+        ) {
+            Text(
+                when {
+                    busy -> "처리 중"
+                    isFavorite -> "★ 저장됨"
+                    else -> "☆ 저장"
+                },
+            )
+        }
     }
 }
 
@@ -482,6 +551,7 @@ private fun StopDrawer(
     locationGranted: Boolean,
     placeSearchConfigured: Boolean,
     apiCallCount: Int,
+    catalogPreparing: Boolean,
     updateState: UpdateUiState,
     onToggleReorder: () -> Unit,
     onRefreshCatalog: () -> Unit,
@@ -498,20 +568,29 @@ private fun StopDrawer(
             Spacer(Modifier.height(14.dp))
             DrawerRow(if (reorderMode) "순서 편집 끝내기" else "즐겨찾기 순서", "$favorites / 20", onToggleReorder)
             DrawerRow("API 키 설정", "공공데이터 연결", onChangeKey)
-            DrawerRow("위치 권한", if (locationGranted) "허용됨" else "내 주변에서 요청", {})
-            DrawerRow("정류장 캐시 갱신", "대구 전체 정류장", onRefreshCatalog)
+            DrawerInfoRow("위치 권한", if (locationGranted) "허용됨" else "내 주변에서 요청")
+            DrawerRow(
+                "정류장 캐시 갱신",
+                if (catalogPreparing) "갱신 중" else "대구 전체 정류장",
+                onRefreshCatalog,
+                enabled = !catalogPreparing,
+            )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text("진단", style = MaterialTheme.typography.labelLarge, color = Color(0xFF65717D))
-            DrawerRow("오늘 API 호출", "${apiCallCount}회", {})
-            DrawerRow("장소 검색", if (placeSearchConfigured) "연결됨" else "운영 주소 미설정", {})
+            DrawerInfoRow("오늘 API 호출", "${apiCallCount}회")
+            DrawerInfoRow("장소 검색", if (placeSearchConfigured) "연결됨" else "운영 주소 미설정")
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             DrawerRow("공지사항", "GitHub Releases", onOpenReleases)
-            DrawerRow("업데이트 확인", updateLabel(updateState), onCheckUpdate)
+            DrawerRow("업데이트 확인", updateLabel(updateState), onCheckUpdate, enabled = updateState != UpdateUiState.Checking)
             if (updateState is UpdateUiState.Available) {
                 when (val download = updateState.download) {
                     DownloadUiState.NotStarted -> DrawerRow("새 버전 다운로드", updateState.info.tagName, onDownloadUpdate)
-                    DownloadUiState.Downloading -> DrawerRow("새 버전 다운로드", "진행 중", {})
-                    is DownloadUiState.Downloaded -> DrawerRow("업데이트 설치", download.file.name) { onInstallUpdate(download.file) }
+                    DownloadUiState.Downloading -> DrawerRow("새 버전 다운로드", "진행 중", {}, enabled = false)
+                    is DownloadUiState.Downloaded -> DrawerRow(
+                        "업데이트 설치",
+                        download.file.name,
+                        onClick = { onInstallUpdate(download.file) },
+                    )
                     is DownloadUiState.Failed -> DrawerRow("다운로드 다시 시도", download.message, onDownloadUpdate)
                 }
             }
@@ -520,13 +599,25 @@ private fun StopDrawer(
 }
 
 @Composable
-private fun DrawerRow(title: String, detail: String, onClick: () -> Unit) {
+private fun DrawerRow(title: String, detail: String, onClick: () -> Unit, enabled: Boolean = true) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, fontWeight = FontWeight.SemiBold)
+        Text(title, fontWeight = FontWeight.SemiBold, color = if (enabled) Ink else Color(0xFF8A949E))
+        Text(detail, color = Color(0xFF65717D), style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun DrawerInfoRow(title: String, detail: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = Color(0xFF52606D))
         Text(detail, color = Color(0xFF65717D), style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -610,11 +701,14 @@ fun StopDetailScreen(
     stop: StopCatalogItem,
     snapshot: StopArrivalSnapshot?,
     isFavorite: Boolean,
+    favoriteBusy: Boolean,
+    manualRefreshing: Boolean,
     pinnedRoutes: Set<RouteDirectionKey>,
     onBack: () -> Unit,
     onFavorite: () -> Unit,
     onTogglePinnedRoute: (StopArrivalGroup) -> Unit,
-    onRefresh: () -> Unit,
+    onAutoRefresh: () -> Unit,
+    onManualRefresh: () -> Unit,
     highlightedRoute: RouteDirectionKey?,
     routeErrors: Set<RouteDirectionKey>,
     onHighlightRoute: (RouteDirectionKey) -> Unit,
@@ -626,7 +720,7 @@ fun StopDetailScreen(
     LaunchedEffect(stop.stopId) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
-                onRefresh()
+                onAutoRefresh()
                 delay(8_000)
             }
         }
@@ -641,8 +735,21 @@ fun StopDetailScreen(
                         Text(stop.stopId, style = MaterialTheme.typography.labelSmall, color = Color(0xFF65717D))
                     }
                 },
-                navigationIcon = { TextButton(onClick = onBack) { Text("←") } },
-                actions = { TextButton(onClick = onFavorite) { Text(if (isFavorite) "★ 저장됨" else "☆ 저장") } },
+                navigationIcon = {
+                    TextButton(
+                        onClick = onBack,
+                        modifier = Modifier.semantics { contentDescription = "뒤로 가기" },
+                    ) { Text("←") }
+                },
+                actions = {
+                    TextButton(
+                        onClick = onFavorite,
+                        enabled = !favoriteBusy,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (isFavorite) "${stop.stopName} 즐겨찾기 해제" else "${stop.stopName} 즐겨찾기 저장"
+                        },
+                    ) { Text(if (favoriteBusy) "처리 중" else if (isFavorite) "★ 저장됨" else "☆ 저장") }
+                },
             )
         },
     ) { padding ->
@@ -658,7 +765,15 @@ fun StopDetailScreen(
                         Text("도착 예정", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                         Text("이 정류장을 향해 오는 모든 노선", color = Color(0xFF65717D))
                     }
-                    OutlinedButton(onClick = onRefresh) { Text("새로고침") }
+                    OutlinedButton(onClick = onManualRefresh, enabled = !manualRefreshing) {
+                        if (manualRefreshing) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("갱신 중")
+                        } else {
+                            Text("새로고침")
+                        }
+                    }
                 }
             }
             if (canFitRoute) item {
@@ -675,6 +790,7 @@ fun StopDetailScreen(
                         group = group,
                         selected = group.key == highlightedRoute,
                         pinned = group.key in pinnedRoutes,
+                        pinBusy = favoriteBusy,
                         partialError = group.key in routeErrors,
                         onClick = { onHighlightRoute(group.key) },
                         onTogglePin = { onTogglePinnedRoute(group) },
@@ -692,6 +808,7 @@ private fun StopArrivalCard(
     group: StopArrivalGroup,
     selected: Boolean,
     pinned: Boolean,
+    pinBusy: Boolean,
     partialError: Boolean,
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
@@ -709,8 +826,8 @@ private fun StopArrivalCard(
                 Text(directionName(group.key.moveDirection), color = Color(0xFF65717D))
                 Spacer(Modifier.weight(1f))
                 if (selected) Text("지도 강조", color = TransitBlue, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onTogglePin) {
-                    Text(if (pinned) "★ 고정됨" else "☆ 홈 고정")
+                TextButton(onClick = onTogglePin, enabled = !pinBusy) {
+                    Text(if (pinBusy) "처리 중" else if (pinned) "★ 고정됨" else "☆ 홈 고정")
                 }
             }
             group.arrivals.take(2).forEachIndexed { index, arrival ->

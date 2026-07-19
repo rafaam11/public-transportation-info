@@ -139,7 +139,11 @@ private fun WidgetFooter(state: StopWidgetUiState) {
         )
         Text(
             if (state.isRefreshing) "새로고침 중…" else "새로고침",
-            modifier = GlanceModifier.clickable(actionRunCallback<RefreshStopWidgetAction>()),
+            modifier = if (state.isRefreshing) {
+                GlanceModifier
+            } else {
+                GlanceModifier.clickable(actionRunCallback<RefreshStopWidgetAction>())
+            },
             style = TextStyle(color = ColorProvider(Color(0xFF1557C0)), fontSize = 10.sp, fontWeight = FontWeight.Bold),
         )
     }
@@ -184,17 +188,20 @@ private fun configurationAction(context: Context, appWidgetId: Int): Action = ac
 class RefreshStopWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+        val widget = CommuteWidget()
         try {
-            AppGraph.get(context).stopWidgetRepository.refresh(appWidgetId)
+            AppGraph.get(context).stopWidgetRepository.refresh(appWidgetId) {
+                widget.update(context, glanceId)
+            }
         } finally {
-            CommuteWidget().update(context, glanceId)
+            widget.update(context, glanceId)
         }
     }
 }
 
 private fun stopWidgetStatus(state: StopWidgetUiState, now: Instant): String = when {
-    state.refreshFailed -> "갱신 실패"
     state.isRefreshing -> "업데이트 중"
+    state.refreshFailed -> "갱신 실패"
     state.fetchedAt == null -> "조회 전"
     else -> elapsedLabel(state.fetchedAt.toEpochMilli(), now)
 }

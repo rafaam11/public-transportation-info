@@ -8,6 +8,7 @@ import com.rafaam11.businfo.data.SaveFavoriteResult
 import com.rafaam11.businfo.data.StopSearchGateway
 import com.rafaam11.businfo.domain.FavoriteStop
 import com.rafaam11.businfo.domain.FavoriteStopId
+import com.rafaam11.businfo.domain.FavoriteRemovalSnapshot
 import com.rafaam11.businfo.domain.GeoPoint
 import com.rafaam11.businfo.domain.NearbyStopResult
 import com.rafaam11.businfo.domain.PinnedRoute
@@ -42,7 +43,11 @@ data class StopHomeUiState(
     val catalogPreparing: Boolean = true,
     val apiCallCount: Int = 0,
     val reorderMode: Boolean = false,
-    val message: String? = null,
+    val reorderDirty: Boolean = false,
+    val favoriteMutatingStopIds: Set<String> = emptySet(),
+    val pendingRemovalStopIds: Set<String> = emptySet(),
+    val manualRefreshingStopIds: Set<String> = emptySet(),
+    val feedbackEvents: List<UiFeedbackEvent> = emptyList(),
 )
 
 class StopHomeViewModel(
@@ -57,6 +62,9 @@ class StopHomeViewModel(
     private var routeRequestGeneration = 0L
     private var currentLocationRequestGeneration = 0L
     private var activeCurrentLocationRequestId: Long? = null
+    private var feedbackSequence = 0L
+    private var catalogPreparationFailureEventId: Long? = null
+    private val pendingRemovals = mutableMapOf<Long, FavoriteRemovalSnapshot>()
 
     init {
         viewModelScope.launch(dispatcher) {
@@ -85,8 +93,17 @@ class StopHomeViewModel(
             _uiState.value = _uiState.value.copy(
                 catalogPreparing = false,
                 apiCallCount = searchGateway.todayApiCallCount(),
-                message = result.exceptionOrNull()?.let { "정류장 정보를 준비하지 못했습니다" },
             )
+            if (result.isFailure) {
+                val queuedFailureId = catalogPreparationFailureEventId
+                    ?.takeIf { id -> _uiState.value.feedbackEvents.any { it.id == id } }
+                if (queuedFailureId == null) {
+                    catalogPreparationFailureEventId = enqueueNotice("정류장 정보를 준비하지 못했습니다")
+                }
+            } else {
+                catalogPreparationFailureEventId?.let { resolveFeedback(it, actionPerformed = false) }
+                catalogPreparationFailureEventId = null
+            }
         }
     }
 
@@ -130,8 +147,8 @@ class StopHomeViewModel(
                 routeStops = result.getOrDefault(emptyList()),
                 routeStopsLoading = false,
                 apiCallCount = searchGateway.todayApiCallCount(),
-                message = result.exceptionOrNull()?.let { "노선 정류장을 불러오지 못했습니다" },
             )
+            if (result.isFailure) enqueueNotice("노선 정류장을 불러오지 못했습니다")
         }
     }
 
@@ -148,7 +165,6 @@ class StopHomeViewModel(
             routeStops = emptyList(),
             nearbyLoading = true,
             nearbyLoadingMessage = "주변 정류장을 찾는 중",
-            message = null,
         )
         viewModelScope.launch(dispatcher) {
             runCatching { searchGateway.nearby(origin) }
@@ -186,7 +202,6 @@ class StopHomeViewModel(
             nearbyLoadingMessage = "현재 위치를 확인하는 중",
             nearbyOrigin = null,
             nearbyTitle = null,
-            message = null,
         )
         return requestId
     }
@@ -220,8 +235,8 @@ class StopHomeViewModel(
         _uiState.value = _uiState.value.copy(
             nearbyLoading = false,
             nearbyLoadingMessage = null,
-            message = "위치 권한 없이도 검색과 지도를 계속 사용할 수 있습니다",
         )
+        enqueueNotice("위치 권한 없이도 검색과 지도를 계속 사용할 수 있습니다")
     }
 
     fun locationUnavailable(requestId: Long) {
@@ -230,29 +245,51 @@ class StopHomeViewModel(
         _uiState.value = _uiState.value.copy(
             nearbyLoading = false,
             nearbyLoadingMessage = null,
-            message = "현재 위치를 확인하지 못했습니다. 위치 서비스를 확인한 뒤 다시 시도해 주세요",
         )
+        enqueueNotice("현재 위치를 확인하지 못했습니다. 위치 서비스를 확인한 뒤 다시 시도해 주세요")
     }
 
     private fun nearbyLookupUnavailable() {
         _uiState.value = _uiState.value.copy(
             nearbyLoading = false,
             nearbyLoadingMessage = null,
-            message = "주변 정류장 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요",
         )
+        enqueueNotice("주변 정류장 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요")
     }
 
     fun refreshStop(stopId: String, force: Boolean = false) {
         viewModelScope.launch(dispatcher) {
-            val result = searchGateway.refreshArrivals(stopId, force)
+            val result = runCatching { searchGateway.refreshArrivals(stopId, force) }
+                .getOrElse { Result.failure(it) }
             result.onSuccess { snapshot ->
                 _uiState.value = _uiState.value.copy(
                     arrivals = _uiState.value.arrivals + (stopId to snapshot),
                     apiCallCount = searchGateway.todayApiCallCount(),
                 )
-            }.onFailure {
-                _uiState.value = _uiState.value.copy(message = "도착정보 갱신에 실패해 마지막 정보를 유지합니다")
             }
+        }
+    }
+
+    fun refreshStopManually(stopId: String) {
+        if (stopId in _uiState.value.manualRefreshingStopIds) return
+        _uiState.value = _uiState.value.copy(
+            manualRefreshingStopIds = _uiState.value.manualRefreshingStopIds + stopId,
+        )
+        viewModelScope.launch(dispatcher) {
+            val result = runCatching { searchGateway.refreshArrivals(stopId, force = true) }
+                .getOrElse { Result.failure(it) }
+            result.onSuccess { snapshot ->
+                _uiState.value = _uiState.value.copy(
+                    arrivals = _uiState.value.arrivals + (stopId to snapshot),
+                    apiCallCount = searchGateway.todayApiCallCount(),
+                )
+                enqueueNotice("도착정보를 갱신했습니다")
+            }.onFailure {
+                enqueueNotice("도착정보 갱신에 실패했습니다. 마지막 정보를 유지합니다")
+            }
+            _uiState.value = _uiState.value.copy(
+                manualRefreshingStopIds = _uiState.value.manualRefreshingStopIds - stopId,
+            )
         }
     }
 
@@ -264,37 +301,107 @@ class StopHomeViewModel(
             _uiState.value = _uiState.value.copy(
                 catalogPreparing = false,
                 apiCallCount = searchGateway.todayApiCallCount(),
-                message = if (result.isSuccess) "정류장 캐시를 갱신했습니다" else "정류장 캐시 갱신에 실패했습니다",
             )
+            enqueueNotice(if (result.isSuccess) "정류장 캐시를 갱신했습니다" else "정류장 캐시 갱신에 실패했습니다")
         }
     }
 
     fun addFavorite(stop: StopCatalogItem) {
+        if (stop.stopId in _uiState.value.favoriteMutatingStopIds || stop.stopId in _uiState.value.pendingRemovalStopIds) return
         val current = _uiState.value.favorites
+        if (current.size + pendingRemovals.size >= MAXIMUM_FAVORITES) {
+            enqueueNotice("즐겨찾기는 최대 20개까지 저장할 수 있습니다")
+            return
+        }
         val favorite = FavoriteStop(
             id = FavoriteStopId.create(), stopId = stop.stopId, stopName = stop.stopName,
             point = GeoPoint(stop.longitude, stop.latitude), sortOrder = current.size,
         )
+        _uiState.value = _uiState.value.copy(
+            favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds + stop.stopId,
+        )
         viewModelScope.launch(dispatcher) {
-            val message = when (favorites.save(favorite)) {
-                SaveFavoriteResult.Saved -> "${stop.stopName}을 즐겨찾기에 추가했습니다"
-                SaveFavoriteResult.AlreadyExists -> "이미 즐겨찾는 정류장입니다"
-                SaveFavoriteResult.LimitReached -> "즐겨찾기는 최대 20개까지 저장할 수 있습니다"
-            }
-            _uiState.value = _uiState.value.copy(message = message)
+            val message = runCatching { favorites.save(favorite) }.fold(
+                onSuccess = { result -> when (result) {
+                    SaveFavoriteResult.Saved -> "${stop.stopName} 정류장을 즐겨찾기에 추가했습니다"
+                    SaveFavoriteResult.AlreadyExists -> "이미 즐겨찾는 정류장입니다"
+                    SaveFavoriteResult.LimitReached -> "즐겨찾기는 최대 20개까지 저장할 수 있습니다"
+                } },
+                onFailure = { "${stop.stopName} 정류장을 즐겨찾기에 저장하지 못했습니다" },
+            )
+            _uiState.value = _uiState.value.copy(
+                favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds - stop.stopId,
+            )
+            enqueueNotice(message)
         }
     }
 
     fun deleteFavorite(id: FavoriteStopId) {
-        viewModelScope.launch(dispatcher) { favorites.delete(id) }
+        val favorite = _uiState.value.favorites.firstOrNull { it.id == id } ?: return
+        if (favorite.stopId in _uiState.value.favoriteMutatingStopIds) return
+        _uiState.value = _uiState.value.copy(
+            favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds + favorite.stopId,
+        )
+        viewModelScope.launch(dispatcher) {
+            val removal = runCatching { favorites.remove(id) }.getOrNull()
+            _uiState.value = _uiState.value.copy(
+                favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds - favorite.stopId,
+            )
+            if (removal == null) {
+                enqueueNotice("${favorite.stopName} 즐겨찾기를 삭제하지 못했습니다")
+                return@launch
+            }
+            val eventId = nextFeedbackId()
+            pendingRemovals[eventId] = removal
+            _uiState.value = _uiState.value.copy(
+                pendingRemovalStopIds = _uiState.value.pendingRemovalStopIds + favorite.stopId,
+                feedbackEvents = _uiState.value.feedbackEvents + UiFeedbackEvent.FavoriteRemoved(
+                    id = eventId,
+                    message = "${favorite.stopName} 즐겨찾기를 해제했습니다",
+                    stopName = favorite.stopName,
+                ),
+            )
+        }
+    }
+
+    fun toggleFavorite(stop: StopCatalogItem) {
+        val favorite = _uiState.value.favorites.firstOrNull { it.stopId == stop.stopId }
+        if (favorite == null) addFavorite(stop) else deleteFavorite(favorite.id)
+    }
+
+    fun resolveFeedback(eventId: Long, actionPerformed: Boolean) {
+        val event = _uiState.value.feedbackEvents.firstOrNull { it.id == eventId } ?: return
+        _uiState.value = _uiState.value.copy(
+            feedbackEvents = _uiState.value.feedbackEvents.filterNot { it.id == eventId },
+        )
+        if (event !is UiFeedbackEvent.FavoriteRemoved) return
+        val removal = pendingRemovals.remove(eventId) ?: return
+        if (!actionPerformed) {
+            _uiState.value = _uiState.value.copy(
+                pendingRemovalStopIds = _uiState.value.pendingRemovalStopIds - removal.favorite.stopId,
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(
+            favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds + removal.favorite.stopId,
+        )
+        viewModelScope.launch(dispatcher) {
+            runCatching { favorites.restore(removal) }
+                .onFailure { enqueueNotice("${removal.favorite.stopName} 즐겨찾기를 복원하지 못했습니다") }
+            _uiState.value = _uiState.value.copy(
+                favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds - removal.favorite.stopId,
+                pendingRemovalStopIds = _uiState.value.pendingRemovalStopIds - removal.favorite.stopId,
+            )
+        }
     }
 
     fun togglePinnedRoute(stopId: String, group: StopArrivalGroup) {
         val favorite = _uiState.value.favorites.firstOrNull { it.stopId == stopId }
         if (favorite == null) {
-            _uiState.value = _uiState.value.copy(message = "먼저 정류장을 즐겨찾기에 저장해 주세요")
+            enqueueNotice("먼저 정류장을 즐겨찾기에 저장해 주세요")
             return
         }
+        if (stopId in _uiState.value.favoriteMutatingStopIds) return
         val alreadyPinned = favorite.pinnedRoutes.any { it.key == group.key }
         val routes = if (alreadyPinned) {
             favorite.pinnedRoutes.filterNot { it.key == group.key }
@@ -308,10 +415,18 @@ class StopHomeViewModel(
                 sortOrder = favorite.pinnedRoutes.size,
             )
         }
+        _uiState.value = _uiState.value.copy(
+            favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds + stopId,
+        )
         viewModelScope.launch(dispatcher) {
-            favorites.save(favorite.copy(pinnedRoutes = routes))
+            val saved = runCatching { favorites.save(favorite.copy(pinnedRoutes = routes)) }.isSuccess
             _uiState.value = _uiState.value.copy(
-                message = if (alreadyPinned) {
+                favoriteMutatingStopIds = _uiState.value.favoriteMutatingStopIds - stopId,
+            )
+            enqueueNotice(
+                if (!saved) {
+                    "${group.routeNo} 노선 고정 상태를 변경하지 못했습니다"
+                } else if (alreadyPinned) {
                     "${group.routeNo} 노선 고정을 해제했습니다"
                 } else {
                     "${group.routeNo} 노선을 홈과 위젯에 고정했습니다"
@@ -321,7 +436,13 @@ class StopHomeViewModel(
     }
 
     fun toggleReorderMode() {
-        _uiState.value = _uiState.value.copy(reorderMode = !_uiState.value.reorderMode)
+        val state = _uiState.value
+        val finishingChangedSession = state.reorderMode && state.reorderDirty
+        _uiState.value = state.copy(
+            reorderMode = !state.reorderMode,
+            reorderDirty = if (state.reorderMode) false else state.reorderDirty,
+        )
+        if (finishingChangedSession) enqueueNotice("즐겨찾기 순서를 저장했습니다")
     }
 
     fun moveFavorite(id: FavoriteStopId, offset: Int) {
@@ -333,18 +454,29 @@ class StopHomeViewModel(
         if (from == to) return
         val moved = ordered.removeAt(from)
         ordered.add(to, moved)
+        _uiState.value = _uiState.value.copy(reorderDirty = true)
         viewModelScope.launch(dispatcher) {
             ordered.forEachIndexed { index, favorite -> favorites.save(favorite.copy(sortOrder = index)) }
         }
     }
 
-    fun consumeMessage() {
-        _uiState.value = _uiState.value.copy(message = null)
+    private fun enqueueNotice(message: String): Long {
+        val eventId = nextFeedbackId()
+        _uiState.value = _uiState.value.copy(
+            feedbackEvents = _uiState.value.feedbackEvents + UiFeedbackEvent.Notice(eventId, message),
+        )
+        return eventId
     }
+
+    private fun nextFeedbackId(): Long = ++feedbackSequence
 
     private fun directionLabel(code: String): String = when (code) {
         "0" -> "정방향"
         "1" -> "역방향"
         else -> "$code 방향"
+    }
+
+    private companion object {
+        const val MAXIMUM_FAVORITES = 20
     }
 }

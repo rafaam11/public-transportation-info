@@ -37,11 +37,14 @@ class BusAppViewModel(
     val setupState: StateFlow<SetupUiState> = _setupState.asStateFlow()
     private val _updateState = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
     val updateState: StateFlow<UpdateUiState> = _updateState.asStateFlow()
+    private val _feedbackEvents = MutableStateFlow<List<UiFeedbackEvent>>(emptyList())
+    val feedbackEvents: StateFlow<List<UiFeedbackEvent>> = _feedbackEvents.asStateFlow()
 
     private var snapshots: List<FavoriteDashboardSnapshot> = emptyList()
     private var errors = emptyMap<CommuteSlot, String>()
     private var refreshing = emptySet<CommuteSlot>()
     private var dashboardJob: Job? = null
+    private var feedbackSequence = 0L
 
     init {
         if (credentials.savedKeyExists()) enterDashboard() else _uiState.value = AppUiState.NeedsKey()
@@ -49,13 +52,31 @@ class BusAppViewModel(
     }
 
     fun checkForUpdatesOnce() {
+        checkForUpdates(announceResult = false)
+    }
+
+    fun checkForUpdatesManually() {
+        checkForUpdates(announceResult = true)
+    }
+
+    private fun checkForUpdates(announceResult: Boolean) {
         if (_updateState.value == UpdateUiState.Checking) return
         _updateState.value = UpdateUiState.Checking
         viewModelScope.launch(dispatcher) {
-            _updateState.value = when (val outcome = updates.checkForUpdate()) {
+            val outcome = updates.checkForUpdate()
+            _updateState.value = when (outcome) {
                 is UpdateCheckOutcome.UpdateAvailable -> UpdateUiState.Available(outcome.info)
                 UpdateCheckOutcome.UpToDate -> UpdateUiState.UpToDate
                 is UpdateCheckOutcome.Failed -> UpdateUiState.Failed(outcome.error)
+            }
+            if (announceResult) {
+                enqueueFeedback(
+                    when (outcome) {
+                        is UpdateCheckOutcome.UpdateAvailable -> "새 버전 ${outcome.info.tagName}을 사용할 수 있습니다"
+                        UpdateCheckOutcome.UpToDate -> "최신 버전을 사용하고 있습니다"
+                        is UpdateCheckOutcome.Failed -> "업데이트 확인에 실패했습니다. ${outcome.error.userMessage()}"
+                    },
+                )
             }
         }
     }
@@ -66,9 +87,15 @@ class BusAppViewModel(
         _updateState.value = available.copy(download = DownloadUiState.Downloading)
         viewModelScope.launch(dispatcher) {
             val current = _updateState.value as? UpdateUiState.Available ?: return@launch
-            _updateState.value = when (val result = downloader.download(current.info)) {
-                is DownloadOutcome.Success -> current.copy(download = DownloadUiState.Downloaded(result.file))
-                is DownloadOutcome.Failed -> current.copy(download = DownloadUiState.Failed(result.message))
+            when (val result = downloader.download(current.info)) {
+                is DownloadOutcome.Success -> {
+                    _updateState.value = current.copy(download = DownloadUiState.Downloaded(result.file))
+                    enqueueFeedback("${current.info.tagName} 설치 파일을 다운로드했습니다")
+                }
+                is DownloadOutcome.Failed -> {
+                    _updateState.value = current.copy(download = DownloadUiState.Failed(result.message))
+                    enqueueFeedback("업데이트 다운로드에 실패했습니다. 다시 시도해 주세요")
+                }
             }
         }
     }
@@ -79,7 +106,10 @@ class BusAppViewModel(
         _uiState.value = state.copy(submitting = true, error = null)
         viewModelScope.launch(dispatcher) {
             val error = credentials.validateAndSave(key)
-            if (error == null) enterDashboard() else {
+            if (error == null) {
+                enterDashboard()
+                enqueueFeedback(if (state.changeMode) "API 키를 변경했습니다" else "API 연결을 완료했습니다")
+            } else {
                 _uiState.value = state.copy(error = error)
             }
         }
@@ -89,6 +119,20 @@ class BusAppViewModel(
         if (!credentials.savedKeyExists()) return
         dashboardJob?.cancel()
         _uiState.value = AppUiState.NeedsKey(changeMode = true)
+    }
+
+    fun cancelKeyChange() {
+        val state = _uiState.value as? AppUiState.NeedsKey ?: return
+        if (!state.changeMode || !credentials.savedKeyExists()) return
+        enterDashboard()
+    }
+
+    fun consumeFeedback(eventId: Long) {
+        _feedbackEvents.value = _feedbackEvents.value.filterNot { it.id == eventId }
+    }
+
+    private fun enqueueFeedback(message: String) {
+        _feedbackEvents.value = _feedbackEvents.value + UiFeedbackEvent.Notice(--feedbackSequence, message)
     }
 
     fun clearKey() {
