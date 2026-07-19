@@ -34,6 +34,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.rafaam11.businfo.data.location.CurrentLocationDataSource
+import com.rafaam11.businfo.data.location.LocationPermissionMissingException
 import com.rafaam11.businfo.domain.CommuteSlot
 import com.rafaam11.businfo.domain.StopCatalogItem
 import com.rafaam11.businfo.ui.AppUiState
@@ -76,15 +77,38 @@ fun BusInfoApp(
                 ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED,
         )
     }
-    fun loadNearby() {
+    fun loadNearby(requestId: Long) {
         scope.launch {
-            currentLocation.current().onSuccess { stopHomeViewModel.showNearby(it) }
-                .onFailure { stopHomeViewModel.locationDenied() }
+            try {
+                currentLocation.current().onSuccess {
+                    stopHomeViewModel.showNearbyFromCurrentLocation(requestId, it)
+                }.onFailure { error ->
+                    if (error is LocationPermissionMissingException) {
+                        stopHomeViewModel.locationPermissionDenied(requestId)
+                    } else {
+                        stopHomeViewModel.locationUnavailable(requestId)
+                    }
+                }
+            } finally {
+                stopHomeViewModel.cancelCurrentLocationRequest(requestId)
+            }
+        }
+    }
+    DisposableEffect(stopHomeViewModel) {
+        onDispose {
+            stopHomeViewModel.cancelCurrentLocationRequest()
         }
     }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        locationGranted = grants.values.any { it }
-        if (locationGranted) loadNearby() else stopHomeViewModel.locationDenied()
+        val requestId = stopHomeViewModel.pendingCurrentLocationRequestId()
+        if (requestId != null) {
+            locationGranted = grants.values.any { it }
+            if (locationGranted) {
+                loadNearby(requestId)
+            } else {
+                stopHomeViewModel.locationPermissionDenied(requestId)
+            }
+        }
     }
     val appReady = appState is AppUiState.Ready
     LaunchedEffect(appReady) {
@@ -141,8 +165,8 @@ fun BusInfoApp(
                             placeSearchConfigured = BuildConfig.PLACE_SEARCH_BASE_URL.isNotBlank(),
                             onSearch = { stopHomeViewModel.clearNearby(); stopHomeViewModel.search(it) },
                             onNearby = {
-                                stopHomeViewModel.clearNearby()
-                                if (locationGranted) loadNearby() else permissionLauncher.launch(
+                                val requestId = stopHomeViewModel.beginNearby()
+                                if (locationGranted) loadNearby(requestId) else permissionLauncher.launch(
                                     arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
                                 )
                             },

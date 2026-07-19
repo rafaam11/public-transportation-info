@@ -14,14 +14,58 @@ import org.w3c.dom.Element
 
 class FoundationContractTest {
     @Test
-    fun releaseVersionIs070() {
+    fun releaseVersionIs071() {
         val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
             if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
         }
         val appBuild = File(repoRoot, "app/build.gradle.kts").readText()
 
-        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*8\\s*$").containsMatchIn(appBuild))
-        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.7\\.0\"\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionCode\\s*=\\s*9\\s*$").containsMatchIn(appBuild))
+        assertTrue(Regex("(?m)^\\s*versionName\\s*=\\s*\"0\\.7\\.1\"\\s*$").containsMatchIn(appBuild))
+    }
+
+    @Test
+    fun releaseBuildInjectsPlaceSearchWorkerUrl() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val workflow = File(repoRoot, ".github/workflows/release.yml").readText()
+
+        assertTrue(workflow.contains("PLACE_SEARCH_BASE_URL: ${'$'}{{ vars.PLACE_SEARCH_BASE_URL }}"))
+    }
+
+    @Test
+    fun stopSearchBarHonorsSafeDrawingInsets() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val screen = File(
+            repoRoot,
+            "app/src/main/kotlin/com/rafaam11/businfo/ui/StopHomeScreens.kt",
+        ).readText()
+
+        assertTrue(screen.contains("windowInsetsPadding("))
+        assertTrue(
+            screen.contains(
+                "WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)",
+            ),
+        )
+    }
+
+    @Test
+    fun nearbyLookupHasVisibleProgressAndDistinctFailureHandling() {
+        val repoRoot = File(requireNotNull(System.getProperty("user.dir"))).let { cwd ->
+            if (File(cwd, "gradle/libs.versions.toml").isFile) cwd else requireNotNull(cwd.parentFile)
+        }
+        val screen = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/ui/StopHomeScreens.kt").readText()
+        val app = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/BusInfoApp.kt").readText()
+        val viewModel = File(repoRoot, "app/src/main/kotlin/com/rafaam11/businfo/ui/StopHomeViewModel.kt").readText()
+
+        assertTrue(viewModel.contains("현재 위치를 확인하는 중"))
+        assertTrue(screen.contains("주변 정류장을 찾는 중"))
+        assertTrue(app.contains("locationPermissionDenied"))
+        assertTrue(app.contains("locationUnavailable"))
+        assertTrue(app.contains("cancelCurrentLocationRequest"))
     }
 
     @Test

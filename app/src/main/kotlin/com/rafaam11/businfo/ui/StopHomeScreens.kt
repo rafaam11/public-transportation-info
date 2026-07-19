@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -157,6 +162,11 @@ fun StopHomeScreen(
                     onStop = onStop,
                     modifier = Modifier.padding(padding),
                 )
+                state.nearbyLoading -> Box(
+                    Modifier.fillMaxSize().padding(padding).padding(16.dp),
+                ) {
+                    LinearStatus(state.nearbyLoadingMessage ?: "주변 정류장을 찾는 중")
+                }
                 state.nearby != null -> NearbyContent(
                     title = state.nearbyTitle.orEmpty(),
                     radiusMeters = state.nearby.radiusMeters,
@@ -197,7 +207,12 @@ private fun StopSearchBar(
 ) {
     Surface(color = Color.White, shadowElevation = 5.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+                )
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {

@@ -55,6 +55,7 @@ jobs:
 
       - name: Build signed release APK
         env:
+          PLACE_SEARCH_BASE_URL: ${{ vars.PLACE_SEARCH_BASE_URL }}
           RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}

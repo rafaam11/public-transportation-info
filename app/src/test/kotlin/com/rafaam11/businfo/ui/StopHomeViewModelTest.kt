@@ -56,11 +56,30 @@ class StopHomeViewModelTest {
         viewModel.search("동대구")
         advanceUntilIdle()
 
-        viewModel.locationDenied()
+        val requestId = viewModel.beginNearby()
+        viewModel.locationPermissionDenied(requestId)
 
         assertEquals("동대구", viewModel.uiState.value.query)
         assertEquals(listOf(stop), viewModel.uiState.value.searchResult.stops)
+        assertFalse(viewModel.uiState.value.nearbyLoading)
         assertTrue(viewModel.uiState.value.message!!.contains("권한"))
+    }
+
+    @Test fun `nearby lookup exposes progress and honest unavailable message`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+
+        val requestId = viewModel.beginNearby()
+
+        assertTrue(viewModel.uiState.value.nearbyLoading)
+        assertEquals("현재 위치를 확인하는 중", viewModel.uiState.value.nearbyLoadingMessage)
+        assertEquals(null, viewModel.uiState.value.nearby)
+
+        viewModel.locationUnavailable(requestId)
+
+        assertFalse(viewModel.uiState.value.nearbyLoading)
+        assertTrue(viewModel.uiState.value.message!!.contains("현재 위치"))
+        assertFalse(viewModel.uiState.value.message!!.contains("권한 없이도"))
     }
 
     @Test fun `adding searched stop creates a stable favorite`() = runTest {
@@ -140,6 +159,58 @@ class StopHomeViewModelTest {
         viewModel.search("동대구")
 
         assertEquals(null, viewModel.uiState.value.nearby)
+    }
+
+    @Test fun `nearby result clears lookup progress`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+        viewModel.beginNearby()
+
+        viewModel.showNearby(GeoPoint(128.6, 35.8))
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.nearbyLoading)
+        assertTrue(viewModel.uiState.value.nearby != null)
+    }
+
+    @Test fun `cancelled current location request cannot leave loading behind`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+        val requestId = viewModel.beginNearby()
+
+        viewModel.cancelCurrentLocationRequest(requestId)
+
+        assertFalse(viewModel.uiState.value.nearbyLoading)
+        assertEquals(null, viewModel.uiState.value.nearbyLoadingMessage)
+    }
+
+    @Test fun `late current location cannot replace a selected place`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        val place = GeoPoint(128.628, 35.880)
+        advanceUntilIdle()
+        val requestId = viewModel.beginNearby()
+
+        viewModel.showNearby(place, "동대구역 주변 정류장")
+        assertEquals("주변 정류장을 찾는 중", viewModel.uiState.value.nearbyLoadingMessage)
+        viewModel.showNearbyFromCurrentLocation(requestId, GeoPoint(128.7, 35.9))
+        advanceUntilIdle()
+
+        assertEquals(place, viewModel.uiState.value.nearbyOrigin)
+        assertEquals("동대구역 주변 정류장", viewModel.uiState.value.nearbyTitle)
+    }
+
+    @Test fun `late current location cannot replace a search started while locating`() = runTest {
+        val viewModel = StopHomeViewModel(FakeFavorites(emptyList()), FakeSearch(), StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+        val requestId = viewModel.beginNearby()
+
+        viewModel.search("동대구")
+        viewModel.showNearbyFromCurrentLocation(requestId, GeoPoint(128.6, 35.8))
+        advanceUntilIdle()
+
+        assertEquals("동대구", viewModel.uiState.value.query)
+        assertEquals(null, viewModel.uiState.value.nearby)
+        assertFalse(viewModel.uiState.value.nearbyLoading)
     }
 
     @Test fun `late route stop response cannot replace the currently selected route`() = runTest {

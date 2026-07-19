@@ -32,6 +32,8 @@ data class StopHomeUiState(
     val searchResult: GroupedSearchResult = GroupedSearchResult(emptyList(), emptyList(), emptyList()),
     val searching: Boolean = false,
     val nearby: NearbyStopResult? = null,
+    val nearbyLoading: Boolean = false,
+    val nearbyLoadingMessage: String? = null,
     val nearbyOrigin: GeoPoint? = null,
     val nearbyTitle: String? = null,
     val selectedRoute: RouteSummary? = null,
@@ -53,6 +55,8 @@ class StopHomeViewModel(
     private var searchJob: Job? = null
     private var catalogJob: Job? = null
     private var routeRequestGeneration = 0L
+    private var currentLocationRequestGeneration = 0L
+    private var activeCurrentLocationRequestId: Long? = null
 
     init {
         viewModelScope.launch(dispatcher) {
@@ -87,12 +91,15 @@ class StopHomeViewModel(
     }
 
     fun search(query: String) {
+        activeCurrentLocationRequestId = null
         routeRequestGeneration++
         _uiState.value = _uiState.value.copy(
             query = query,
             searching = query.isNotBlank(),
             selectedRoute = null,
             nearby = null,
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
             nearbyOrigin = null,
             nearbyTitle = null,
         )
@@ -113,6 +120,7 @@ class StopHomeViewModel(
     }
 
     fun selectRoute(route: RouteSummary) {
+        activeCurrentLocationRequestId = null
         val requestGeneration = ++routeRequestGeneration
         _uiState.value = _uiState.value.copy(selectedRoute = route, routeStops = emptyList(), routeStopsLoading = true)
         viewModelScope.launch(dispatcher) {
@@ -133,20 +141,105 @@ class StopHomeViewModel(
     }
 
     fun showNearby(origin: GeoPoint, title: String = "내 주변 정류장") {
-        routeRequestGeneration++
-        _uiState.value = _uiState.value.copy(selectedRoute = null, routeStops = emptyList())
+        activeCurrentLocationRequestId = null
+        val requestGeneration = ++routeRequestGeneration
+        _uiState.value = _uiState.value.copy(
+            selectedRoute = null,
+            routeStops = emptyList(),
+            nearbyLoading = true,
+            nearbyLoadingMessage = "주변 정류장을 찾는 중",
+            message = null,
+        )
         viewModelScope.launch(dispatcher) {
-            val nearby = searchGateway.nearby(origin)
-            _uiState.value = _uiState.value.copy(nearby = nearby, nearbyOrigin = origin, nearbyTitle = title)
+            runCatching { searchGateway.nearby(origin) }
+                .onSuccess { nearby ->
+                    if (requestGeneration != routeRequestGeneration) return@launch
+                    _uiState.value = _uiState.value.copy(
+                        nearby = nearby,
+                        nearbyLoading = false,
+                        nearbyLoadingMessage = null,
+                        nearbyOrigin = origin,
+                        nearbyTitle = title,
+                    )
+                }
+                .onFailure {
+                    if (requestGeneration == routeRequestGeneration) nearbyLookupUnavailable()
+                }
         }
     }
 
-    fun clearNearby() {
-        _uiState.value = _uiState.value.copy(nearby = null, nearbyOrigin = null, nearbyTitle = null)
+    fun showNearbyFromCurrentLocation(requestId: Long, origin: GeoPoint) {
+        if (activeCurrentLocationRequestId != requestId) return
+        activeCurrentLocationRequestId = null
+        showNearby(origin)
     }
 
-    fun locationDenied() {
-        _uiState.value = _uiState.value.copy(message = "위치 권한 없이도 검색과 지도를 계속 사용할 수 있습니다")
+    fun beginNearby(): Long {
+        val requestId = ++currentLocationRequestGeneration
+        activeCurrentLocationRequestId = requestId
+        routeRequestGeneration++
+        _uiState.value = _uiState.value.copy(
+            selectedRoute = null,
+            routeStops = emptyList(),
+            nearby = null,
+            nearbyLoading = true,
+            nearbyLoadingMessage = "현재 위치를 확인하는 중",
+            nearbyOrigin = null,
+            nearbyTitle = null,
+            message = null,
+        )
+        return requestId
+    }
+
+    fun pendingCurrentLocationRequestId(): Long? = activeCurrentLocationRequestId
+
+    fun cancelCurrentLocationRequest(requestId: Long? = null) {
+        val activeRequestId = activeCurrentLocationRequestId ?: return
+        if (requestId != null && requestId != activeRequestId) return
+        activeCurrentLocationRequestId = null
+        _uiState.value = _uiState.value.copy(
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
+        )
+    }
+
+    fun clearNearby() {
+        activeCurrentLocationRequestId = null
+        _uiState.value = _uiState.value.copy(
+            nearby = null,
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
+            nearbyOrigin = null,
+            nearbyTitle = null,
+        )
+    }
+
+    fun locationPermissionDenied(requestId: Long) {
+        if (activeCurrentLocationRequestId != requestId) return
+        activeCurrentLocationRequestId = null
+        _uiState.value = _uiState.value.copy(
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
+            message = "위치 권한 없이도 검색과 지도를 계속 사용할 수 있습니다",
+        )
+    }
+
+    fun locationUnavailable(requestId: Long) {
+        if (activeCurrentLocationRequestId != requestId) return
+        activeCurrentLocationRequestId = null
+        _uiState.value = _uiState.value.copy(
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
+            message = "현재 위치를 확인하지 못했습니다. 위치 서비스를 확인한 뒤 다시 시도해 주세요",
+        )
+    }
+
+    private fun nearbyLookupUnavailable() {
+        _uiState.value = _uiState.value.copy(
+            nearbyLoading = false,
+            nearbyLoadingMessage = null,
+            message = "주변 정류장 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요",
+        )
     }
 
     fun refreshStop(stopId: String, force: Boolean = false) {
